@@ -5,7 +5,7 @@ from snap7 import util
 
 def main():
     value = 0
-    db_size = 16
+    db_size = 2000
     db_data = (ctypes.c_ubyte * db_size)()
 
     srv = Server()
