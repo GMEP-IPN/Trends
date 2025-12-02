@@ -155,10 +155,59 @@ trends/
 ├── web/
 │   └── templates/
 │       └── index.html          # Веб-интерфейс
+├── assets/
+│   ├── trends.ico              # Иконка приложения (Windows)
+│   └── trends.png              # Иконка приложения (PNG)
 ├── tests/                      # Тесты
 ├── config.yaml                 # Системные настройки
 ├── requirements.txt            # Зависимости
-└── run.py                      # Точка входа
+├── run.py                      # Точка входа (разработка)
+├── trends_app.py               # Точка входа (Windows .exe)
+├── trends.spec                 # PyInstaller спецификация
+├── create_icon.py              # Генератор иконок
+└── build.bat                   # Скрипт сборки Windows
+```
+
+## 🖥️ Windows-приложение
+
+### Сборка .exe
+
+```bash
+# Создание иконки (если нет)
+python create_icon.py
+
+# Сборка приложения
+.\venv\Scripts\pyinstaller.exe trends.spec --noconfirm
+
+# Или через build.bat
+.\build.bat
+```
+
+Готовый `Trends.exe` появится в папке `dist/`.
+
+### Запуск
+
+1. Запустите `Trends.exe`
+2. В системном трее появится иконка 📊
+3. Браузер автоматически откроется на http://127.0.0.1:8000
+4. Правый клик по иконке → меню (Открыть в браузере / Выход)
+
+### Логи
+
+При запуске `.exe` логи записываются в `trends_app.log` рядом с исполняемым файлом.
+
+## 💾 Расположение базы данных
+
+База данных `trends.db` создаётся:
+- **При разработке**: в корне проекта (`C:\Users\...\Trends\trends.db`)
+- **При запуске .exe**: рядом с исполняемым файлом (`dist\trends.db`)
+
+Путь настраивается в `config.yaml`:
+```yaml
+database:
+  url: "sqlite:///trends.db"  # Относительный путь
+  # или абсолютный:
+  # url: "sqlite:///C:/Data/trends.db"
 ```
 
 ## 🧪 Тестирование
@@ -181,6 +230,8 @@ pytest -v
 - FastAPI + Uvicorn (веб-сервер)
 - SQLAlchemy 2.0+ (ORM)
 - Chart.js (графики)
+- pystray + Pillow (системный трей)
+- PyInstaller (сборка .exe)
 
 ## 📄 Лицензия
 

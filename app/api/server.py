@@ -5,10 +5,17 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 from pathlib import Path
 
+import sys
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
+
+# Определяем базовую директорию (для .exe и обычного запуска)
+if getattr(sys, 'frozen', False):
+    _BASE_DIR = Path(sys._MEIPASS)
+else:
+    _BASE_DIR = Path(__file__).parent.parent.parent
 
 from app.storage import get_session, PLC, Tag, TrendData
 from app.services.trend_service import (
@@ -34,7 +41,7 @@ app = FastAPI(
 )
 
 # Статические файлы
-static_path = Path(__file__).parent.parent.parent / "web" / "static"
+static_path = _BASE_DIR / "web" / "static"
 static_path.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
@@ -123,10 +130,10 @@ class PLCCreateResponse(BaseModel):
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Главная страница"""
-    template_path = Path(__file__).parent.parent.parent / "web" / "templates" / "index.html"
+    template_path = _BASE_DIR / "web" / "templates" / "index.html"
     if template_path.exists():
         return FileResponse(template_path)
-    return HTMLResponse("<h1>Trends Collector</h1><p>UI not found</p>")
+    return HTMLResponse("<h1>Trends</h1><p>UI not found. Check installation.</p>")
 
 
 @app.get("/api/status", response_model=SystemStatusResponse)
