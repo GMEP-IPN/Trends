@@ -36,4 +36,8 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# PyInstaller
+build/
+dist/
+*.manifest
 
