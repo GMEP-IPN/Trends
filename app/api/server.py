@@ -23,7 +23,8 @@ collector_status = {
     "running": False,
     "connected": False,
     "last_error": None,
-    "plc_name": None
+    "plc_name": None,
+    "restart_requested": False
 }
 
 app = FastAPI(
@@ -101,6 +102,20 @@ class TagCreateResponse(BaseModel):
     message: str
 
 
+class PLCCreateRequest(BaseModel):
+    name: str
+    ip_address: str
+    tcp_port: int = 102
+    rack: int = 0
+    slot: int = 1
+
+
+class PLCCreateResponse(BaseModel):
+    id: int
+    name: str
+    message: str
+
+
 # === Endpoints ===
 
 @app.get("/", response_class=HTMLResponse)
@@ -165,6 +180,81 @@ async def list_plcs():
             ))
         
         return result
+
+
+@app.post("/api/plcs", response_model=PLCCreateResponse)
+async def create_plc(request: PLCCreateRequest):
+    """Создание нового ПЛК"""
+    with get_session() as session:
+        # Проверяем уникальность имени
+        existing = session.query(PLC).filter(PLC.name == request.name).first()
+        if existing:
+            raise HTTPException(status_code=400, detail=f"PLC '{request.name}' already exists")
+        
+        plc = PLC(
+            name=request.name,
+            ip_address=request.ip_address,
+            tcp_port=request.tcp_port,
+            rack=request.rack,
+            slot=request.slot,
+            is_active=True
+        )
+        session.add(plc)
+        session.flush()
+        
+        return PLCCreateResponse(
+            id=plc.id,
+            name=plc.name,
+            message=f"PLC '{plc.name}' created successfully"
+        )
+
+
+@app.put("/api/plcs/{plc_id}")
+async def update_plc(plc_id: int, request: PLCCreateRequest):
+    """Обновление ПЛК"""
+    with get_session() as session:
+        plc = session.query(PLC).filter(PLC.id == plc_id).first()
+        
+        if not plc:
+            raise HTTPException(status_code=404, detail="PLC not found")
+        
+        # Проверяем уникальность имени (если изменилось)
+        if request.name != plc.name:
+            existing = session.query(PLC).filter(PLC.name == request.name).first()
+            if existing:
+                raise HTTPException(status_code=400, detail=f"PLC '{request.name}' already exists")
+        
+        plc.name = request.name
+        plc.ip_address = request.ip_address
+        plc.tcp_port = request.tcp_port
+        plc.rack = request.rack
+        plc.slot = request.slot
+        
+        return {"message": f"PLC '{plc.name}' updated", "id": plc_id}
+
+
+@app.delete("/api/plcs/{plc_id}")
+async def delete_plc(plc_id: int):
+    """Удаление ПЛК (деактивация)"""
+    with get_session() as session:
+        plc = session.query(PLC).filter(PLC.id == plc_id).first()
+        
+        if not plc:
+            raise HTTPException(status_code=404, detail="PLC not found")
+        
+        plc.is_active = False
+        
+        # Деактивируем все теги этого ПЛК
+        session.query(Tag).filter(Tag.plc_id == plc_id).update({"is_active": False})
+        
+        return {"message": f"PLC '{plc.name}' deleted", "id": plc_id}
+
+
+@app.post("/api/collector/restart")
+async def restart_collector():
+    """Запрос на перезапуск коллектора"""
+    collector_status["restart_requested"] = True
+    return {"message": "Restart requested", "status": "pending"}
 
 
 @app.get("/api/tags", response_model=List[TagResponse])

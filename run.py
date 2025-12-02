@@ -341,6 +341,38 @@ def run_collector(config, simulate=False, web=False):
                 for conn in collector.connections.values():
                     collector_status["connected"] = conn.client.connected
                     break
+                
+                # Проверяем запрос на перезапуск
+                if collector_status.get("restart_requested"):
+                    logger.info("🔄 Restart requested, reloading configuration...")
+                    collector_status["restart_requested"] = False
+                    
+                    # Останавливаем коллектор
+                    collector.stop()
+                    collector.connections.clear()
+                    collector.buffer.clear()
+                    
+                    # Перезагружаем конфигурацию
+                    collector.load_configuration()
+                    
+                    if not collector.connections:
+                        logger.warning("⚠️ No PLCs configured after reload")
+                        collector_status["connected"] = False
+                        continue
+                    
+                    # Переподключаемся
+                    for plc_id, conn in collector.connections.items():
+                        logger.info(f"🔌 Reconnecting to PLC '{conn.name}'...")
+                        conn.client.connect()
+                        collector_status["connected"] = conn.client.connected
+                    
+                    # Перезапускаем
+                    collector.running = True
+                    collector._thread = threading.Thread(target=collector._run_loop, daemon=True)
+                    collector._thread.start()
+                    
+                    logger.info("✅ Collector restarted with new configuration")
+                    
     except KeyboardInterrupt:
         pass
     finally:

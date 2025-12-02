@@ -519,6 +519,102 @@
         .toast.success { border-color: var(--success); }
         .toast.error { border-color: var(--danger); }
         
+        /* Settings Button */
+        .settings-btn {
+            width: 40px;
+            height: 40px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-size: 1.25rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .settings-btn:hover {
+            background: var(--bg-hover);
+            border-color: var(--accent);
+        }
+        
+        /* PLC List in Modal */
+        .plc-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+        }
+        
+        .plc-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.2s;
+        }
+        
+        .plc-item:last-child {
+            border-bottom: none;
+        }
+        
+        .plc-item:hover {
+            background: var(--bg-hover);
+        }
+        
+        .plc-info {
+            flex: 1;
+        }
+        
+        .plc-info-name {
+            font-weight: 500;
+        }
+        
+        .plc-info-address {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .plc-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .plc-actions button {
+            width: 28px;
+            height: 28px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+        
+        .btn-edit {
+            background: var(--accent-secondary);
+            color: white;
+        }
+        
+        .btn-edit:hover {
+            background: #6d28d9;
+        }
+        
+        .btn-delete-small {
+            background: var(--danger);
+            color: white;
+        }
+        
+        .btn-delete-small:hover {
+            background: #dc2626;
+        }
+        
+        .empty-plc {
+            padding: 2rem;
+            text-align: center;
+            color: var(--text-muted);
+        }
+        
         .toast-icon {
             font-size: 1.25rem;
         }
@@ -568,9 +664,12 @@
             <div class="logo-icon">📊</div>
             <span class="logo-text">Trends Collector</span>
         </div>
-        <div class="status-badge">
-            <span class="status-dot" id="statusDot"></span>
-            <span id="statusText">Проверка...</span>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <button class="settings-btn" onclick="openPLCModal()" title="Настройка ПЛК">⚙️</button>
+            <div class="status-badge">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Проверка...</span>
+            </div>
         </div>
     </header>
     
@@ -685,6 +784,76 @@
                     <button type="submit" class="btn btn-primary">Добавить</button>
                 </div>
             </form>
+        </div>
+    </div>
+    
+    <!-- PLC Settings Modal -->
+    <div class="modal-overlay" id="plcModalOverlay">
+        <div class="modal" style="max-width: 560px;">
+            <div class="modal-header">
+                <h3 class="modal-title">⚙️ Настройка ПЛК</h3>
+                <button class="modal-close" onclick="closePLCModal()">×</button>
+            </div>
+            
+            <!-- PLC List -->
+            <div class="plc-list" id="plcList">
+                <div class="empty-plc">Загрузка...</div>
+            </div>
+            
+            <!-- Add/Edit PLC Form -->
+            <div id="plcFormContainer" style="display: none;">
+                <div style="border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 0.5rem;">
+                    <h4 style="margin-bottom: 1rem; color: var(--text-secondary);" id="plcFormTitle">➕ Добавить ПЛК</h4>
+                    
+                    <form id="plcForm" onsubmit="submitPLC(event)">
+                        <input type="hidden" id="plcEditId" value="">
+                        
+                        <div class="form-group">
+                            <label class="form-label">Имя ПЛК</label>
+                            <input type="text" class="form-input" id="plcName" placeholder="MainPLC" required>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">IP адрес</label>
+                                <input type="text" class="form-input" id="plcIP" placeholder="192.168.1.10" required 
+                                       pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$">
+                                <div class="form-hint">Для симуляции: 127.0.0.1</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Порт</label>
+                                <input type="number" class="form-input" id="plcPort" value="102" min="1" max="65535">
+                                <div class="form-hint">Симуляция: 2000, Реальный: 102</div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Rack</label>
+                                <input type="number" class="form-input" id="plcRack" value="0" min="0" max="7">
+                                <div class="form-hint">Обычно 0</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Slot</label>
+                                <select class="form-select" id="plcSlot">
+                                    <option value="1">1 (S7-1200/1500)</option>
+                                    <option value="2">2 (S7-300/400)</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn-secondary" onclick="cancelPLCForm()">Отмена</button>
+                            <button type="submit" class="btn btn-primary" id="plcSubmitBtn">Добавить</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Add Button -->
+            <button class="btn btn-primary" id="addPLCBtn" onclick="showPLCForm()" style="width: 100%; margin-top: 1rem;">
+                ➕ Добавить ПЛК
+            </button>
         </div>
     </div>
     
@@ -999,10 +1168,208 @@
             if (e.target === e.currentTarget) closeModal();
         });
         
+        document.getElementById('plcModalOverlay').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closePLCModal();
+        });
+        
         // Close modal on Escape
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeModal();
+            if (e.key === 'Escape') {
+                closeModal();
+                closePLCModal();
+            }
         });
+        
+        // === PLC Management ===
+        
+        function openPLCModal() {
+            document.getElementById('plcModalOverlay').classList.add('active');
+            loadPLCs();
+        }
+        
+        function closePLCModal() {
+            document.getElementById('plcModalOverlay').classList.remove('active');
+            cancelPLCForm();
+        }
+        
+        async function loadPLCs() {
+            try {
+                const response = await fetch('/api/plcs');
+                const plcs = await response.json();
+                
+                const plcList = document.getElementById('plcList');
+                
+                if (plcs.length === 0) {
+                    plcList.innerHTML = '<div class="empty-plc">Нет настроенных ПЛК</div>';
+                    return;
+                }
+                
+                plcList.innerHTML = plcs.map(plc => `
+                    <div class="plc-item">
+                        <div class="plc-info">
+                            <div class="plc-info-name">${plc.name}</div>
+                            <div class="plc-info-address">${plc.ip_address}:${plc.tcp_port} • ${plc.tag_count} тегов</div>
+                        </div>
+                        <div class="plc-actions">
+                            <button class="btn-edit" onclick="editPLC(${plc.id}, '${plc.name}', '${plc.ip_address}', ${plc.tcp_port})" title="Редактировать">✏️</button>
+                            <button class="btn-delete-small" onclick="deletePLC(${plc.id}, '${plc.name}')" title="Удалить">🗑️</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading PLCs:', error);
+            }
+        }
+        
+        function showPLCForm(editMode = false) {
+            document.getElementById('plcFormContainer').style.display = 'block';
+            document.getElementById('addPLCBtn').style.display = 'none';
+            document.getElementById('plcFormTitle').textContent = editMode ? '✏️ Редактировать ПЛК' : '➕ Добавить ПЛК';
+            document.getElementById('plcSubmitBtn').textContent = editMode ? 'Сохранить' : 'Добавить';
+            
+            if (!editMode) {
+                document.getElementById('plcForm').reset();
+                document.getElementById('plcEditId').value = '';
+                document.getElementById('plcPort').value = '102';
+                document.getElementById('plcRack').value = '0';
+            }
+            
+            document.getElementById('plcName').focus();
+        }
+        
+        function cancelPLCForm() {
+            document.getElementById('plcFormContainer').style.display = 'none';
+            document.getElementById('addPLCBtn').style.display = 'block';
+            document.getElementById('plcForm').reset();
+            document.getElementById('plcEditId').value = '';
+        }
+        
+        function editPLC(id, name, ip, port) {
+            document.getElementById('plcEditId').value = id;
+            document.getElementById('plcName').value = name;
+            document.getElementById('plcIP').value = ip;
+            document.getElementById('plcPort').value = port;
+            showPLCForm(true);
+        }
+        
+        async function submitPLC(event) {
+            event.preventDefault();
+            
+            const editId = document.getElementById('plcEditId').value;
+            const data = {
+                name: document.getElementById('plcName').value,
+                ip_address: document.getElementById('plcIP').value,
+                tcp_port: parseInt(document.getElementById('plcPort').value),
+                rack: parseInt(document.getElementById('plcRack').value),
+                slot: parseInt(document.getElementById('plcSlot').value)
+            };
+            
+            try {
+                let response;
+                if (editId) {
+                    response = await fetch(`/api/plcs/${editId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                } else {
+                    response = await fetch('/api/plcs', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                }
+                
+                if (response.ok) {
+                    if (editId) {
+                        showToast(`ПЛК "${data.name}" обновлён. Перезапустите коллектор для применения!`, 'success');
+                        showRestartBanner();
+                    } else {
+                        showToast(`ПЛК "${data.name}" добавлен. Перезапустите коллектор!`, 'success');
+                        showRestartBanner();
+                    }
+                    cancelPLCForm();
+                    loadPLCs();
+                    loadTags();
+                } else {
+                    const error = await response.json();
+                    showToast(error.detail || 'Ошибка сохранения', 'error');
+                }
+            } catch (error) {
+                showToast('Ошибка сети', 'error');
+            }
+        }
+        
+        function showRestartBanner() {
+            const banner = document.getElementById('connectionBanner');
+            const bannerText = document.getElementById('bannerText');
+            banner.classList.add('show');
+            banner.style.background = 'linear-gradient(135deg, var(--warning), #b45309)';
+            bannerText.innerHTML = '⚠️ Конфигурация изменена. <button onclick="restartCollector()" style="background: white; color: #b45309; border: none; padding: 0.25rem 0.75rem; border-radius: 4px; cursor: pointer; font-weight: 500; margin-left: 0.5rem;">🔄 Перезапустить</button>';
+        }
+        
+        async function restartCollector() {
+            try {
+                const response = await fetch('/api/collector/restart', { method: 'POST' });
+                
+                if (response.ok) {
+                    showToast('Коллектор перезапускается...', 'success');
+                    
+                    // Скрываем баннер через 2 секунды
+                    setTimeout(() => {
+                        document.getElementById('connectionBanner').classList.remove('show');
+                        loadStatus();
+                        loadTags();
+                    }, 2000);
+                } else {
+                    showToast('Ошибка перезапуска', 'error');
+                }
+            } catch (error) {
+                showToast('Ошибка сети', 'error');
+            }
+        }
+        
+        async function deletePLC(id, name) {
+            if (!confirm(`Удалить ПЛК "${name}" и все его теги?`)) return;
+            
+            try {
+                const response = await fetch(`/api/plcs/${id}`, { method: 'DELETE' });
+                
+                if (response.ok) {
+                    showToast(`ПЛК "${name}" удалён. Перезапустите коллектор!`, 'success');
+                    showRestartBanner();
+                    loadPLCs();
+                    loadTags();
+                } else {
+                    showToast('Ошибка удаления', 'error');
+                }
+            } catch (error) {
+                showToast('Ошибка сети', 'error');
+            }
+        }
+        
+        // То же для тегов
+        async function deleteTagWithRestart(event, tagId, tagName) {
+            event.stopPropagation();
+            
+            if (!confirm(`Удалить тег "${tagName}"?`)) return;
+            
+            try {
+                const response = await fetch(`/api/tags/${tagId}`, { method: 'DELETE' });
+                
+                if (response.ok) {
+                    showToast(`Тег "${tagName}" удалён`, 'success');
+                    if (selectedTagId === tagId) {
+                        selectedTagId = null;
+                    }
+                    loadTags();
+                } else {
+                    showToast('Ошибка удаления', 'error');
+                }
+            } catch (error) {
+                showToast('Ошибка сети', 'error');
+            }
+        }
         
         // Load system status
         async function loadStatus() {

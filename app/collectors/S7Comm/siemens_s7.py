@@ -31,11 +31,20 @@ class PLC:
     def connect(self):
         if not self.connected:
             try:
+                print(f"🔌 Connecting to {self.plc_ip}:{self.tcp_port}...")
                 self.client.connect(self.plc_ip, self.rack, self.slot, tcp_port=self.tcp_port)
-                self.connected = True
-                print("🔌 Connected to PLC")
+                
+                # Проверяем реальное соединение тестовым чтением
+                try:
+                    self.client.db_read(1, 0, 1)  # Читаем 1 байт из DB1
+                    self.connected = True
+                    print(f"✅ Connected to PLC at {self.plc_ip}:{self.tcp_port}")
+                except Exception as read_err:
+                    self.connected = False
+                    print(f"⚠️ Connection test failed to {self.plc_ip}:{self.tcp_port}: {read_err}")
+                    self.client.disconnect()
             except Exception as e:
-                print(f"⚠️ Connection failed: {e}")
+                print(f"⚠️ Connection failed to {self.plc_ip}:{self.tcp_port}: {e}")
                 self.connected = False
 
     def disconnect(self):

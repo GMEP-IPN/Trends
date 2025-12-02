@@ -110,6 +110,7 @@ class CollectorService:
             plcs = session.query(PLC).filter(PLC.is_active == True).all()
             
             for plc in plcs:
+                print(f"  📡 Loading PLC: {plc.name} @ {plc.ip_address}:{plc.tcp_port}")
                 conn = PLCConnection(plc)
                 
                 # Загружаем активные теги для этого ПЛК
