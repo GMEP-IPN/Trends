@@ -87,3 +87,4 @@ class TrendData(Base):
         return f"<TrendData tag={self.tag_id} value={self.value} @ {self.timestamp}>"
 
 
+

@@ -3,6 +3,7 @@ Trends Collector - Точка входа
 
 Использование:
     python run.py                    - Запуск сбора данных
+    python run.py --simulate         - Запуск в режиме симуляции (встроенный симулятор)
     python run.py --init             - Инициализация БД из config.yaml
     python run.py --test-connection  - Проверка подключения к ПЛК
     python run.py --list-tags        - Показать настроенные теги
@@ -11,6 +12,7 @@ Trends Collector - Точка входа
 import sys
 import signal
 import argparse
+import threading
 from pathlib import Path
 
 # Добавляем корень проекта в путь
@@ -19,6 +21,72 @@ sys.path.insert(0, str(Path(__file__).parent))
 from app.config.config_loader import load_config, setup_logging, get_logger
 from app.storage import init_db, get_session, PLC, Tag, TrendData
 from app.services.collector_service import CollectorService
+
+
+# Глобальный флаг для остановки симулятора
+_simulator_running = False
+
+
+def run_simulator():
+    """Запуск симулятора в текущем потоке"""
+    global _simulator_running
+    
+    import ctypes
+    import time
+    import random
+    import math
+    from snap7.server import Server, SrvArea
+    from snap7 import util
+    
+    logger = get_logger()
+    
+    # Параметры симуляции
+    base_temp = 22.0
+    base_humidity = 45.0
+    temperature = base_temp
+    humidity = base_humidity
+    tick = 0
+    
+    db_size = 2000
+    db_data = (ctypes.c_ubyte * db_size)()
+    
+    srv = Server()
+    srv.register_area(SrvArea.DB, 1, db_data)
+    srv.start(2000)
+    
+    logger.info("🏠 Room Simulator started on localhost:2000")
+    
+    _simulator_running = True
+    
+    try:
+        while _simulator_running:
+            tick += 1
+            
+            # Суточные колебания + шум
+            daily_variation = 2.0 * math.sin(tick * 0.01)
+            noise = random.uniform(-0.3, 0.3)
+            
+            # Плавное изменение температуры
+            target = base_temp + daily_variation
+            temperature += (target - temperature) * 0.05 + noise
+            temperature = max(15.0, min(35.0, temperature))
+            
+            # Влажность
+            humidity_target = 45.0 - (temperature - 22.0) * 2
+            humidity += (humidity_target - humidity) * 0.1 + random.uniform(-1, 1)
+            humidity = max(20.0, min(80.0, humidity))
+            
+            # Записываем в DB1
+            util.set_real(db_data, 0, round(temperature, 2))
+            util.set_real(db_data, 4, round(humidity, 2))
+            
+            time.sleep(1)
+            
+    except Exception as e:
+        logger.error(f"Simulator error: {e}")
+    finally:
+        srv.destroy()
+        logger.info("🏠 Room Simulator stopped")
 
 
 def init_from_config(config):
@@ -69,6 +137,7 @@ def init_from_config(config):
                 
                 if existing_tag:
                     logger.info(f"    Updating tag: {tag_cfg.name}")
+                    existing_tag.name = tag_cfg.name
                     existing_tag.db_number = tag_cfg.db
                     existing_tag.start_address = tag_cfg.address
                     existing_tag.data_type = tag_cfg.type
@@ -137,8 +206,6 @@ def test_connection(config):
 
 def list_tags(config):
     """Показать настроенные теги"""
-    logger = get_logger()
-    
     print("\n" + "="*60)
     print("📋 CONFIGURED TAGS")
     print("="*60)
@@ -160,8 +227,6 @@ def list_tags(config):
 
 def show_status():
     """Показать статус системы"""
-    logger = get_logger()
-    
     print("\n" + "="*60)
     print("📊 SYSTEM STATUS")
     print("="*60)
@@ -187,16 +252,31 @@ def show_status():
     print("\n" + "="*60)
 
 
-def run_collector(config):
-    """Запуск коллектора"""
+def run_collector(config, simulate=False):
+    """Запуск коллектора (опционально с симулятором)"""
+    global _simulator_running
+    
     logger = get_logger()
+    simulator_thread = None
+    
+    # Запуск симулятора в отдельном потоке
+    if simulate:
+        logger.info("🚀 Starting in SIMULATION mode...")
+        simulator_thread = threading.Thread(target=run_simulator, daemon=True)
+        simulator_thread.start()
+        
+        # Даём симулятору время запуститься
+        import time
+        time.sleep(2)
     
     collector = CollectorService(
         flush_interval_sec=config.flush_interval_sec
     )
     
     def signal_handler(sig, frame):
+        global _simulator_running
         logger.info("Interrupt received, stopping...")
+        _simulator_running = False
         collector.stop()
         sys.exit(0)
     
@@ -206,10 +286,12 @@ def run_collector(config):
     
     if not collector.running:
         logger.error("Failed to start collector. Run --init first.")
+        _simulator_running = False
         return
     
+    mode = "SIMULATION" if simulate else "PRODUCTION"
     print("\n" + "="*50)
-    print("📊 Collector is running. Press Ctrl+C to stop.")
+    print(f"📊 Collector running [{mode}]. Press Ctrl+C to stop.")
     print("="*50 + "\n")
     
     try:
@@ -219,6 +301,7 @@ def run_collector(config):
     except KeyboardInterrupt:
         pass
     finally:
+        _simulator_running = False
         collector.stop()
 
 
@@ -228,6 +311,8 @@ def main():
     )
     parser.add_argument('--init', action='store_true',
                         help='Инициализация БД из config.yaml')
+    parser.add_argument('--simulate', '-s', action='store_true',
+                        help='Запуск в режиме симуляции (встроенный симулятор)')
     parser.add_argument('--test-connection', action='store_true',
                         help='Проверка подключения к ПЛК')
     parser.add_argument('--list-tags', action='store_true',
@@ -260,7 +345,7 @@ def main():
     elif args.status:
         show_status()
     else:
-        run_collector(config)
+        run_collector(config, simulate=args.simulate)
 
 
 if __name__ == "__main__":

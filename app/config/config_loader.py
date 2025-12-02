@@ -159,3 +159,4 @@ def get_logger() -> logging.Logger:
         _logger = setup_logging(get_config())
     return _logger
 
+
