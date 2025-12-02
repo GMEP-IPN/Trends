@@ -26,11 +26,11 @@ storage:
 plcs:
   # Пример для реального ПЛК Siemens S7-1200/1500
   - name: "MainPLC"
-    ip: "192.168.1.10"      # IP адрес ПЛК
+    ip: "10.11.33.21"       # IP адрес ПЛК
     port: 102               # Порт (102 - стандартный для S7)
     rack: 0                 # Rack (обычно 0)
     slot: 1                 # Slot (S7-1200: 1, S7-300/400: 2)
-    enabled: false          # Отключен для тестов
+    enabled: true           # ✅ Включён
     
     # Теги для сбора
     tags:
@@ -75,7 +75,7 @@ plcs:
     port: 2000
     rack: 0
     slot: 1
-    enabled: true           # ✅ Включён для тестов
+    enabled: false          # Отключён
     
     tags:
       - name: "RoomTemperature"

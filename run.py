@@ -282,6 +282,9 @@ def run_collector(config, simulate=False, web=False):
         logger.info("🌐 Starting web server at http://127.0.0.1:8000")
         web_thread = threading.Thread(target=run_web, daemon=True)
         web_thread.start()
+        
+        # Импортируем статус для обновления
+        from app.api.server import collector_status
     
     collector = CollectorService(
         flush_interval_sec=config.flush_interval_sec
@@ -301,7 +304,19 @@ def run_collector(config, simulate=False, web=False):
     if not collector.running:
         logger.error("Failed to start collector. Run --init first.")
         _simulator_running = False
+        if web:
+            collector_status["running"] = False
+            collector_status["connected"] = False
         return
+    
+    # Обновляем статус для веб-интерфейса
+    if web:
+        collector_status["running"] = True
+        # Проверяем подключение
+        for conn in collector.connections.values():
+            collector_status["connected"] = conn.client.connected
+            collector_status["plc_name"] = conn.name
+            break
     
     mode_parts = []
     if simulate:
@@ -320,10 +335,19 @@ def run_collector(config, simulate=False, web=False):
         while collector.running:
             import time
             time.sleep(1)
+            
+            # Обновляем статус подключения для веб-интерфейса
+            if web:
+                for conn in collector.connections.values():
+                    collector_status["connected"] = conn.client.connected
+                    break
     except KeyboardInterrupt:
         pass
     finally:
         _simulator_running = False
+        if web:
+            collector_status["running"] = False
+            collector_status["connected"] = False
         collector.stop()
 
 

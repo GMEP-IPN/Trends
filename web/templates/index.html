@@ -103,6 +103,34 @@
             animation: pulse 2s infinite;
         }
         
+        .status-dot.disconnected {
+            background: var(--danger);
+        }
+        
+        .status-dot.stopped {
+            background: var(--text-muted);
+            animation: none;
+        }
+        
+        /* Connection Banner */
+        .connection-banner {
+            background: linear-gradient(135deg, var(--danger), #991b1b);
+            padding: 0.75rem 2rem;
+            text-align: center;
+            font-size: 0.875rem;
+            display: none;
+        }
+        
+        .connection-banner.show {
+            display: block;
+        }
+        
+        .connection-banner a {
+            color: white;
+            text-decoration: underline;
+            margin-left: 0.5rem;
+        }
+        
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
@@ -530,14 +558,19 @@
     </style>
 </head>
 <body>
+    <!-- Connection Banner -->
+    <div class="connection-banner" id="connectionBanner">
+        ⚠️ <span id="bannerText">Нет подключения к ПЛК</span>
+    </div>
+    
     <header class="header">
         <div class="logo">
             <div class="logo-icon">📊</div>
             <span class="logo-text">Trends Collector</span>
         </div>
         <div class="status-badge">
-            <span class="status-dot"></span>
-            <span id="statusText">Подключено</span>
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Проверка...</span>
         </div>
     </header>
     
@@ -764,6 +797,18 @@
                 const tags = await response.json();
                 
                 const tagList = document.getElementById('tagList');
+                
+                if (tags.length === 0) {
+                    tagList.innerHTML = `
+                        <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                            <div style="font-size: 2rem; margin-bottom: 0.5rem;">📭</div>
+                            <div>Нет тегов</div>
+                            <div style="font-size: 0.75rem; margin-top: 0.5rem;">Нажмите + чтобы добавить</div>
+                        </div>
+                    `;
+                    return;
+                }
+                
                 tagList.innerHTML = tags.map(tag => `
                     <div class="tag-item ${selectedTagId === tag.id ? 'active' : ''}" 
                          data-id="${tag.id}" 
@@ -959,10 +1004,57 @@
             if (e.key === 'Escape') closeModal();
         });
         
+        // Load system status
+        async function loadStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const status = await response.json();
+                
+                const dot = document.getElementById('statusDot');
+                const text = document.getElementById('statusText');
+                const banner = document.getElementById('connectionBanner');
+                const bannerText = document.getElementById('bannerText');
+                
+                // Update status indicator
+                dot.className = 'status-dot';
+                
+                if (status.connection_status === 'connected') {
+                    text.textContent = 'Подключено';
+                    banner.classList.remove('show');
+                } else if (status.connection_status === 'disconnected') {
+                    dot.classList.add('disconnected');
+                    text.textContent = 'Отключено';
+                    banner.classList.add('show');
+                    bannerText.textContent = 'Нет подключения к ПЛК. Коллектор пытается переподключиться...';
+                } else if (status.connection_status === 'stopped') {
+                    dot.classList.add('stopped');
+                    text.textContent = 'Остановлен';
+                    banner.classList.add('show');
+                    bannerText.textContent = 'Коллектор не запущен. Запустите: python run.py --web';
+                } else {
+                    dot.classList.add('stopped');
+                    text.textContent = 'Неизвестно';
+                }
+                
+                return status;
+            } catch (error) {
+                console.error('Error loading status:', error);
+                const dot = document.getElementById('statusDot');
+                const text = document.getElementById('statusText');
+                dot.className = 'status-dot stopped';
+                text.textContent = 'Ошибка';
+                return null;
+            }
+        }
+        
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             initChart();
             loadTags();
+            loadStatus();
+            
+            // Периодически обновляем статус
+            setInterval(loadStatus, 5000);
         });
     </script>
 </body>

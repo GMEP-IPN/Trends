@@ -18,6 +18,14 @@ from app.services.trend_service import (
     get_all_tags
 )
 
+# Глобальный статус коллектора (обновляется из run.py)
+collector_status = {
+    "running": False,
+    "connected": False,
+    "last_error": None,
+    "plc_name": None
+}
+
 app = FastAPI(
     title="Trends Collector API",
     description="API для просмотра трендов с ПЛК",
@@ -72,6 +80,8 @@ class SystemStatusResponse(BaseModel):
     tag_count: int
     trend_count: int
     last_update: Optional[str]
+    collector_running: bool = False
+    connection_status: str = "unknown"  # connected, disconnected, error
 
 
 class TagCreateRequest(BaseModel):
@@ -113,11 +123,22 @@ async def get_status():
         last = session.query(TrendData).order_by(TrendData.timestamp.desc()).first()
         last_update = last.timestamp.isoformat() if last else None
         
+        # Определяем статус подключения
+        if collector_status["running"]:
+            if collector_status["connected"]:
+                conn_status = "connected"
+            else:
+                conn_status = "disconnected"
+        else:
+            conn_status = "stopped"
+        
         return SystemStatusResponse(
             plc_count=plc_count,
             tag_count=tag_count,
             trend_count=trend_count,
-            last_update=last_update
+            last_update=last_update,
+            collector_running=collector_status["running"],
+            connection_status=conn_status
         )
 
 
