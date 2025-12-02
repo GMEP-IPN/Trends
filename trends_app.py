@@ -149,7 +149,9 @@ class TrendsApp:
             app_logger.info("Starting collector service...")
             
             self.manager = CollectorManager(
-                flush_interval_sec=self.config.flush_interval_sec
+                flush_interval_sec=self.config.flush_interval_sec,
+                retention_days=self.config.retention_days,
+                cleanup_interval_hours=self.config.cleanup_interval_hours
             )
             self.manager.start()
             

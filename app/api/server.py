@@ -4,12 +4,13 @@ REST API сервер для Trends Collector.
 from datetime import datetime, timedelta
 from typing import Optional, List
 from pathlib import Path
+import re
 
 import sys
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, model_validator
 
 # Определяем базовую директорию (для .exe и обычного запуска)
 if getattr(sys, 'frozen', False):
@@ -96,6 +97,53 @@ class TagCreateRequest(BaseModel):
     data_size: int
     poll_interval_ms: int = 1000
     plc_id: Optional[int] = None  # Если не указан, берём первый активный ПЛК
+    
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError('Tag name cannot be empty')
+        if len(v) > 100:
+            raise ValueError('Tag name too long (max 100 characters)')
+        return v
+    
+    @field_validator('db_number')
+    @classmethod
+    def validate_db_number(cls, v: int) -> int:
+        if not 1 <= v <= 65535:
+            raise ValueError('DB number must be between 1 and 65535')
+        return v
+    
+    @field_validator('start_address')
+    @classmethod
+    def validate_start_address(cls, v: int) -> int:
+        if not 0 <= v <= 65535:
+            raise ValueError('Start address must be between 0 and 65535')
+        return v
+    
+    @field_validator('data_type')
+    @classmethod
+    def validate_data_type(cls, v: str) -> str:
+        v = v.lower().strip()
+        valid_types = {'int', 'dint', 'real', 'bool', 'word', 'dword', 'string'}
+        if v not in valid_types:
+            raise ValueError(f'Invalid data type. Must be one of: {", ".join(valid_types)}')
+        return v
+    
+    @field_validator('data_size')
+    @classmethod
+    def validate_data_size(cls, v: int) -> int:
+        if not 1 <= v <= 256:
+            raise ValueError('Data size must be between 1 and 256 bytes')
+        return v
+    
+    @field_validator('poll_interval_ms')
+    @classmethod
+    def validate_poll_interval(cls, v: int) -> int:
+        if not 100 <= v <= 60000:
+            raise ValueError('Poll interval must be between 100ms and 60000ms')
+        return v
 
 
 class TagCreateResponse(BaseModel):
@@ -110,6 +158,49 @@ class PLCCreateRequest(BaseModel):
     tcp_port: int = 102
     rack: int = 0
     slot: int = 1
+    
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError('Name cannot be empty')
+        if len(v) > 100:
+            raise ValueError('Name too long (max 100 characters)')
+        if not re.match(r'^[\w\s\-\.]+$', v):
+            raise ValueError('Name contains invalid characters')
+        return v
+    
+    @field_validator('ip_address')
+    @classmethod
+    def validate_ip(cls, v: str) -> str:
+        v = v.strip()
+        # IPv4 validation
+        pattern = r'^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
+        if not re.match(pattern, v):
+            raise ValueError(f'Invalid IP address: {v}')
+        return v
+    
+    @field_validator('tcp_port')
+    @classmethod
+    def validate_port(cls, v: int) -> int:
+        if not 1 <= v <= 65535:
+            raise ValueError('Port must be between 1 and 65535')
+        return v
+    
+    @field_validator('rack')
+    @classmethod
+    def validate_rack(cls, v: int) -> int:
+        if not 0 <= v <= 7:
+            raise ValueError('Rack must be between 0 and 7')
+        return v
+    
+    @field_validator('slot')
+    @classmethod
+    def validate_slot(cls, v: int) -> int:
+        if not 0 <= v <= 31:
+            raise ValueError('Slot must be between 0 and 31')
+        return v
 
 
 class PLCCreateResponse(BaseModel):

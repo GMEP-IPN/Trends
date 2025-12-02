@@ -141,16 +141,20 @@ logging:
 
 
 class TestAppConfig:
-    """Тесты AppConfig dataclass"""
+    """Tests for AppConfig dataclass"""
     
     def test_app_config_creation(self):
-        """Создание AppConfig"""
+        """Creating AppConfig"""
         config = AppConfig(
             database_url="sqlite:///test.db",
             batch_size=10,
             flush_interval_sec=5.0,
             reconnect_delay_sec=5,
             retention_days=30,
+            cleanup_interval_hours=6,
+            simulator_port=2000,
+            simulator_db_size=2000,
+            simulator_update_interval=1.0,
             api_host="127.0.0.1",
             api_port=8000,
             log_level="INFO",
@@ -160,3 +164,5 @@ class TestAppConfig:
         assert config.database_url == "sqlite:///test.db"
         assert config.batch_size == 10
         assert config.api_port == 8000
+        assert config.cleanup_interval_hours == 6
+        assert config.simulator_port == 2000

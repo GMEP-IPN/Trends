@@ -20,6 +20,13 @@ collector:
 # Настройки хранения
 storage:
   retention_days: 30       # Сколько дней хранить данные
+  cleanup_interval_hours: 6  # Как часто очищать старые данные
+
+# Симулятор (для режима --simulate)
+simulator:
+  port: 2000               # Порт симулятора
+  db_size: 2000            # Размер DB в байтах
+  update_interval_sec: 1   # Интервал обновления значений
 
 # API сервер
 api:

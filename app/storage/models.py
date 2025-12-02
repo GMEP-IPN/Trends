@@ -77,10 +77,14 @@ class TrendData(Base):
     # Связь
     tag = relationship("Tag", back_populates="trend_data")
 
-    # Индексы для быстрого поиска по времени
+    # Индексы для быстрого поиска
     __table_args__ = (
+        # Основной индекс для запросов трендов по тегу и времени
         Index("ix_trend_tag_time", "tag_id", "timestamp"),
+        # Индекс для запросов только по времени (cleanup)
         Index("ix_trend_timestamp", "timestamp"),
+        # Индекс для быстрого получения последнего значения (DESC)
+        Index("ix_trend_tag_time_desc", "tag_id", timestamp.desc()),
     )
 
     def __repr__(self):

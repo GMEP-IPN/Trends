@@ -23,6 +23,12 @@ class AppConfig:
     
     # Хранение
     retention_days: int
+    cleanup_interval_hours: int
+    
+    # Симулятор
+    simulator_port: int
+    simulator_db_size: int
+    simulator_update_interval: float
     
     # API
     api_host: str
@@ -63,6 +69,12 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
         
         # Хранение
         retention_days=data.get('storage', {}).get('retention_days', 30),
+        cleanup_interval_hours=data.get('storage', {}).get('cleanup_interval_hours', 6),
+        
+        # Симулятор
+        simulator_port=data.get('simulator', {}).get('port', 2000),
+        simulator_db_size=data.get('simulator', {}).get('db_size', 2000),
+        simulator_update_interval=data.get('simulator', {}).get('update_interval_sec', 1.0),
         
         # API
         api_host=data.get('api', {}).get('host', '127.0.0.1'),

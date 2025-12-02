@@ -102,7 +102,12 @@ class CollectorService:
         service.stop()
     """
     
-    def __init__(self, flush_interval_sec: float = 5.0, retention_days: int = 30):
+    def __init__(
+        self, 
+        flush_interval_sec: float = 5.0, 
+        retention_days: int = 30,
+        cleanup_interval_hours: int = 6
+    ):
         self.connections: Dict[int, PLCConnection] = {}  # plc_id -> PLCConnection
         self.buffer: list[TagValue] = []  # Буфер для пакетной записи
         self.running = False
@@ -111,9 +116,9 @@ class CollectorService:
         self._flush_interval = flush_interval_sec
         self._last_flush = datetime.now()
         
-        # Настройки очистки старых данных
+        # Настройки очистки старых данных (из config.yaml)
         self._retention_days = retention_days
-        self._cleanup_interval_hours = 6  # Очистка каждые 6 часов
+        self._cleanup_interval_hours = cleanup_interval_hours
         self._last_cleanup = datetime.now()
     
     def load_configuration(self):

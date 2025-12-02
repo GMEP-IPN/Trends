@@ -109,8 +109,15 @@ class CollectorManager:
     Инкапсулирует логику запуска, остановки и перезапуска.
     """
     
-    def __init__(self, flush_interval_sec: float = 5.0):
+    def __init__(
+        self, 
+        flush_interval_sec: float = 5.0,
+        retention_days: int = 30,
+        cleanup_interval_hours: int = 6
+    ):
         self.flush_interval_sec = flush_interval_sec
+        self.retention_days = retention_days
+        self.cleanup_interval_hours = cleanup_interval_hours
         self.collector: Optional[CollectorService] = None
         self._lock = threading.Lock()
     
@@ -127,7 +134,9 @@ class CollectorManager:
                 return True
             
             self.collector = CollectorService(
-                flush_interval_sec=self.flush_interval_sec
+                flush_interval_sec=self.flush_interval_sec,
+                retention_days=self.retention_days,
+                cleanup_interval_hours=self.cleanup_interval_hours
             )
             self.collector.start()
             
@@ -164,7 +173,9 @@ class CollectorManager:
         with self._lock:
             if not self.collector:
                 self.collector = CollectorService(
-                    flush_interval_sec=self.flush_interval_sec
+                    flush_interval_sec=self.flush_interval_sec,
+                    retention_days=self.retention_days,
+                    cleanup_interval_hours=self.cleanup_interval_hours
                 )
             
             # Останавливаем текущий цикл

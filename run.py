@@ -26,8 +26,15 @@ from app.services.collector_manager import CollectorManager, collector_status
 _simulator_running = False
 
 
-def run_simulator():
-    """Запуск симулятора в текущем потоке"""
+def run_simulator(port: int = 2000, db_size: int = 2000, update_interval: float = 1.0):
+    """
+    Запуск симулятора в текущем потоке.
+    
+    Args:
+        port: Порт симулятора (из config.yaml)
+        db_size: Размер DB в байтах (из config.yaml)
+        update_interval: Интервал обновления в секундах (из config.yaml)
+    """
     global _simulator_running
     
     import ctypes
@@ -49,14 +56,13 @@ def run_simulator():
     # Генераторы для дополнительных адресов (плавные случайные значения)
     extra_values = {}  # address -> current_value
     
-    db_size = 2000
     db_data = (ctypes.c_ubyte * db_size)()
     
     srv = Server()
     srv.register_area(SrvArea.DB, 1, db_data)
-    srv.start(2000)
+    srv.start(port)
     
-    logger.info("🏠 Room Simulator started on localhost:2000")
+    logger.info(f"🏠 Room Simulator started on localhost:{port}")
     logger.info("   DB1.0: Temperature, DB1.4: Humidity")
     logger.info("   Other addresses: random values 30-70")
     
@@ -100,7 +106,7 @@ def run_simulator():
                 
                 util.set_real(db_data, addr, round(extra_values[addr], 2))
             
-            time.sleep(1)
+            time.sleep(update_interval)
             
     except Exception as e:
         logger.error(f"Simulator error: {e}")
@@ -162,7 +168,11 @@ def run_collector(config, simulate=False):
     # Запуск симулятора в отдельном потоке
     if simulate:
         logger.info("🚀 Starting in SIMULATION mode...")
-        simulator_thread = threading.Thread(target=run_simulator, daemon=True)
+        simulator_thread = threading.Thread(
+            target=run_simulator,
+            args=(config.simulator_port, config.simulator_db_size, config.simulator_update_interval),
+            daemon=True
+        )
         simulator_thread.start()
         
         # Даём симулятору время запуститься
@@ -177,7 +187,7 @@ def run_collector(config, simulate=False):
                 sim_plc = PLC(
                     name="SimPLC",
                     ip_address="127.0.0.1",
-                    tcp_port=2000,
+                    tcp_port=config.simulator_port,  # Используем порт из config
                     rack=0,
                     slot=1,
                     is_active=True
@@ -227,7 +237,9 @@ def run_collector(config, simulate=False):
     
     # Используем CollectorManager вместо прямой работы с CollectorService
     manager = CollectorManager(
-        flush_interval_sec=config.flush_interval_sec
+        flush_interval_sec=config.flush_interval_sec,
+        retention_days=config.retention_days,
+        cleanup_interval_hours=config.cleanup_interval_hours
     )
     
     def signal_handler(sig, frame):
