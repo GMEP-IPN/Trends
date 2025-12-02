@@ -55,7 +55,7 @@ from pystray import MenuItem as item
 
 from app.config.config_loader import load_config, setup_logging, get_logger
 from app.storage import init_db, get_session, PLC
-from app.services.collector_service import CollectorService
+from app.services.collector_manager import CollectorManager, collector_status
 
 
 class TrendsApp:
@@ -64,7 +64,7 @@ class TrendsApp:
     def __init__(self):
         self.config = None
         self.logger = None
-        self.collector = None
+        self.manager: CollectorManager = None  # Используем CollectorManager
         self.web_thread = None
         self.running = False
         self.icon = None
@@ -145,18 +145,16 @@ class TrendsApp:
             app_logger.info("Waiting for web server to start...")
             time.sleep(2)
             
-            # Запуск коллектора
+            # Запуск коллектора через CollectorManager
             app_logger.info("Starting collector service...")
-            from app.api.server import collector_status
             
-            self.collector = CollectorService(
+            self.manager = CollectorManager(
                 flush_interval_sec=self.config.flush_interval_sec
             )
-            self.collector.start()
+            self.manager.start()
             
-            collector_status["running"] = self.collector.running
-            app_logger.info(f"Collector running: {self.collector.running}")
-            app_logger.info(f"Collector connections: {len(self.collector.connections)}")
+            app_logger.info(f"Collector running: {collector_status.running}")
+            app_logger.info(f"Collector connections: {self.manager.collector.connections if self.manager.collector else 0}")
             
             self.running = True
             app_logger.info(f"✅ Server running at {self.server_url}")
@@ -170,33 +168,12 @@ class TrendsApp:
             while self.running:
                 time.sleep(1)
                 
-                if self.collector and self.collector.running:
-                    # Обновляем статус коллектора
-                    for conn in self.collector.connections.values():
-                        collector_status["connected"] = conn.client.connected
-                        break
+                if self.manager:
+                    # Обновляем статус подключения
+                    self.manager.update_connection_status()
                     
-                    # Проверяем запрос на перезапуск
-                    if collector_status.get("restart_requested"):
-                        self.logger.info("🔄 Restart requested...")
-                        collector_status["restart_requested"] = False
-                        
-                        self.collector.stop()
-                        self.collector.connections.clear()
-                        self.collector.buffer.clear()
-                        self.collector.load_configuration()
-                        
-                        for plc_id, conn in self.collector.connections.items():
-                            conn.client.connect()
-                            collector_status["connected"] = conn.client.connected
-                        
-                        self.collector.running = True
-                        self.collector._thread = threading.Thread(
-                            target=self.collector._run_loop, daemon=True
-                        )
-                        self.collector._thread.start()
-                        
-                        self.logger.info("✅ Collector restarted")
+                    # Проверяем запрос на перезапуск (логика в CollectorManager)
+                    self.manager.check_restart_request()
                         
         except Exception as e:
             app_logger.error(f"CRITICAL ERROR in start_server: {e}")
@@ -208,8 +185,8 @@ class TrendsApp:
         """Остановка сервера"""
         self.running = False
         
-        if self.collector:
-            self.collector.stop()
+        if self.manager:
+            self.manager.stop()
         
         if self.logger:
             self.logger.info("🛑 Server stopped")
@@ -228,10 +205,10 @@ class TrendsApp:
         if not self.running:
             return "Остановлен"
         
-        if self.collector and self.collector.connections:
-            connected = sum(1 for c in self.collector.connections.values() if c.client.connected)
-            total = len(self.collector.connections)
-            if connected == total:
+        if self.manager and self.manager.collector and self.manager.collector.connections:
+            connected = sum(1 for c in self.manager.collector.connections.values() if c.client.connected)
+            total = len(self.manager.collector.connections)
+            if connected == total and total > 0:
                 return f"Работает ({connected} ПЛК)"
             elif connected > 0:
                 return f"Частично ({connected}/{total} ПЛК)"

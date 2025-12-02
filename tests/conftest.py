@@ -77,7 +77,7 @@ def sample_tag(temp_db, sample_plc):
 
 @pytest.fixture
 def temp_config_file():
-    """Создание временного config.yaml"""
+    """Создание временного config.yaml (ПЛК/теги теперь в БД)"""
     config_content = """
 database:
   url: "sqlite:///test_trends.db"
@@ -90,21 +90,9 @@ collector:
 storage:
   retention_days: 7
 
-plcs:
-  - name: "TestPLC"
-    ip: "127.0.0.1"
-    port: 2000
-    rack: 0
-    slot: 1
-    enabled: true
-    tags:
-      - name: "TestTag"
-        description: "Test tag"
-        db: 1
-        address: 0
-        type: "real"
-        size: 4
-        poll_ms: 100
+api:
+  host: "127.0.0.1"
+  port: 8000
 
 logging:
   level: "DEBUG"

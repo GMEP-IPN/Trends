@@ -20,19 +20,12 @@ else:
 from app.storage import get_session, PLC, Tag, TrendData
 from app.services.trend_service import (
     get_trend_data, 
-    get_latest_value, 
+    get_latest_value,
+    get_latest_values_batch,
     get_statistics,
     get_all_tags
 )
-
-# Глобальный статус коллектора (обновляется из run.py)
-collector_status = {
-    "running": False,
-    "connected": False,
-    "last_error": None,
-    "plc_name": None,
-    "restart_requested": False
-}
+from app.services.collector_manager import collector_status
 
 app = FastAPI(
     title="Trends Collector API",
@@ -148,8 +141,8 @@ async def get_status():
         last_update = last.timestamp.isoformat() if last else None
         
         # Определяем статус подключения
-        if collector_status["running"]:
-            if collector_status["connected"]:
+        if collector_status.running:
+            if collector_status.connected:
                 conn_status = "connected"
             else:
                 conn_status = "disconnected"
@@ -161,7 +154,7 @@ async def get_status():
             tag_count=tag_count,
             trend_count=trend_count,
             last_update=last_update,
-            collector_running=collector_status["running"],
+            collector_running=collector_status.running,
             connection_status=conn_status
         )
 
@@ -214,7 +207,7 @@ async def create_plc(request: PLCCreateRequest):
         session.flush()
         
         # Автоматический перезапуск коллектора
-        collector_status["restart_requested"] = True
+        collector_status.request_restart()
         
         return PLCCreateResponse(
             id=plc.id,
@@ -245,7 +238,7 @@ async def update_plc(plc_id: int, request: PLCCreateRequest):
         plc.slot = request.slot
         
         # Автоматический перезапуск коллектора
-        collector_status["restart_requested"] = True
+        collector_status.request_restart()
         
         return {"message": f"PLC '{plc.name}' updated", "id": plc_id}
 
@@ -265,7 +258,7 @@ async def delete_plc(plc_id: int):
         session.query(Tag).filter(Tag.plc_id == plc_id).update({"is_active": False})
         
         # Автоматический перезапуск коллектора
-        collector_status["restart_requested"] = True
+        collector_status.request_restart()
         
         return {"message": f"PLC '{plc.name}' deleted", "id": plc_id}
 
@@ -273,13 +266,13 @@ async def delete_plc(plc_id: int):
 @app.post("/api/collector/restart")
 async def restart_collector():
     """Запрос на перезапуск коллектора"""
-    collector_status["restart_requested"] = True
+    collector_status.request_restart()
     return {"message": "Restart requested", "status": "pending"}
 
 
 @app.get("/api/tags", response_model=List[TagResponse])
 async def list_tags(plc_id: Optional[int] = None):
-    """Список тегов с последними значениями"""
+    """Список тегов с последними значениями (оптимизировано)"""
     with get_session() as session:
         query = session.query(Tag).filter(Tag.is_active == True)
         
@@ -288,9 +281,13 @@ async def list_tags(plc_id: Optional[int] = None):
         
         tags = query.all()
         
+        # Получаем все последние значения одним запросом (решение N+1)
+        tag_ids = [tag.id for tag in tags]
+        latest_values = get_latest_values_batch(tag_ids)
+        
         result = []
         for tag in tags:
-            latest = get_latest_value(tag.id)
+            latest = latest_values.get(tag.id)
             
             result.append(TagResponse(
                 id=tag.id,
@@ -391,7 +388,7 @@ async def create_tag(request: TagCreateRequest):
                 existing.is_active = True
                 
                 # Автоматический перезапуск коллектора
-                collector_status["restart_requested"] = True
+                collector_status.request_restart()
                 
                 return TagCreateResponse(
                     id=existing.id,
@@ -415,7 +412,7 @@ async def create_tag(request: TagCreateRequest):
         session.flush()
         
         # Автоматический перезапуск коллектора
-        collector_status["restart_requested"] = True
+        collector_status.request_restart()
         
         return TagCreateResponse(
             id=tag.id,
@@ -436,7 +433,7 @@ async def delete_tag(tag_id: int):
         tag.is_active = False
         
         # Автоматический перезапуск коллектора
-        collector_status["restart_requested"] = True
+        collector_status.request_restart()
         
         return {"message": f"Tag '{tag.name}' deleted", "id": tag_id}
 

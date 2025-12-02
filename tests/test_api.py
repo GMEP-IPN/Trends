@@ -5,7 +5,8 @@ import pytest
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
-from app.api.server import app, collector_status
+from app.api.server import app
+from app.services.collector_manager import collector_status
 
 
 @pytest.fixture
@@ -17,16 +18,16 @@ def client():
 @pytest.fixture
 def reset_collector_status():
     """Сброс статуса коллектора перед тестом"""
-    collector_status["running"] = False
-    collector_status["connected"] = False
-    collector_status["last_error"] = None
-    collector_status["plc_name"] = None
-    collector_status["restart_requested"] = False
+    collector_status.running = False
+    collector_status.connected = False
+    collector_status.last_error = None
+    collector_status.plc_name = None
+    collector_status._restart_requested = False
     yield
     # Сброс после теста
-    collector_status["running"] = False
-    collector_status["connected"] = False
-    collector_status["restart_requested"] = False
+    collector_status.running = False
+    collector_status.connected = False
+    collector_status._restart_requested = False
 
 
 class TestStatusEndpoint:
@@ -51,8 +52,8 @@ class TestStatusEndpoint:
     
     def test_status_connected(self, client, reset_collector_status):
         """Статус когда подключено"""
-        collector_status["running"] = True
-        collector_status["connected"] = True
+        collector_status.running = True
+        collector_status.connected = True
         
         with patch('app.api.server.get_session') as mock_session:
             session = MagicMock()
@@ -71,8 +72,8 @@ class TestStatusEndpoint:
     
     def test_status_disconnected(self, client, reset_collector_status):
         """Статус когда отключено"""
-        collector_status["running"] = True
-        collector_status["connected"] = False
+        collector_status.running = True
+        collector_status.connected = False
         
         with patch('app.api.server.get_session') as mock_session:
             session = MagicMock()
@@ -100,12 +101,15 @@ class TestTagsEndpoint:
             mock_session.return_value.__enter__ = MagicMock(return_value=session)
             mock_session.return_value.__exit__ = MagicMock(return_value=False)
             
-            response = client.get("/api/tags")
-            
-            assert response.status_code == 200
-            assert response.json() == []
+            with patch('app.api.server.get_latest_values_batch') as mock_batch:
+                mock_batch.return_value = {}
+                
+                response = client.get("/api/tags")
+                
+                assert response.status_code == 200
+                assert response.json() == []
     
-    def test_create_tag_success(self, client):
+    def test_create_tag_success(self, client, reset_collector_status):
         """Успешное создание тега"""
         with patch('app.api.server.get_session') as mock_session:
             session = MagicMock()
@@ -174,6 +178,7 @@ class TestTagsEndpoint:
             mock_plc.id = 1
             
             mock_existing_tag = MagicMock()
+            mock_existing_tag.is_active = True  # Активный тег
             
             session.query.return_value.filter.return_value.first.side_effect = [
                 mock_plc,          # PLC найден
@@ -194,7 +199,7 @@ class TestTagsEndpoint:
             assert response.status_code == 400
             assert "already exists" in response.json()["detail"]
     
-    def test_delete_tag_success(self, client):
+    def test_delete_tag_success(self, client, reset_collector_status):
         """Успешное удаление тега"""
         with patch('app.api.server.get_session') as mock_session:
             session = MagicMock()
@@ -283,7 +288,7 @@ class TestPLCsEndpoint:
             assert response.status_code == 200
             data = response.json()
             assert data["name"] == "NewPLC"
-            assert collector_status["restart_requested"] == True
+            assert collector_status.restart_requested == True
     
     def test_create_plc_duplicate(self, client):
         """Создание ПЛК с существующим именем"""
@@ -326,7 +331,7 @@ class TestPLCsEndpoint:
             
             assert response.status_code == 200
             assert mock_plc.is_active == False
-            assert collector_status["restart_requested"] == True
+            assert collector_status.restart_requested == True
 
 
 class TestTrendEndpoint:
@@ -408,5 +413,4 @@ class TestCollectorRestartEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "pending"
-        assert collector_status["restart_requested"] == True
-
+        assert collector_status.restart_requested == True

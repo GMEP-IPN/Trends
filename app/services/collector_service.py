@@ -10,8 +10,9 @@ from typing import Dict, Optional
 from dataclasses import dataclass
 
 from app.storage import get_session, PLC, Tag, TrendData
-from app.collectors.S7Comm.siemens_s7 import PLC as S7Client
+from app.collectors.S7Comm.siemens_s7 import PLC as S7Client, PLCConnectionError, PLCReadError
 from app.config.settings import BATCH_INSERT_SIZE
+from app.services.trend_service import cleanup_old_data
 
 logger = logging.getLogger('trends')
 
@@ -54,7 +55,12 @@ class PLCConnection:
         return elapsed_ms >= tag.poll_interval_ms
     
     def poll_tag(self, tag: Tag) -> Optional[TagValue]:
-        """Опрос одного тега"""
+        """
+        Опрос одного тега.
+        
+        Returns:
+            TagValue с данными или None если не удалось прочитать
+        """
         try:
             value = self.client.read_db(
                 db_number=tag.db_number,
@@ -69,16 +75,20 @@ class PLCConnection:
                 tag_id=tag.id,
                 value=float(value),
                 timestamp=datetime.now(),
-                quality=192  # Good
+                quality=192  # Good (OPC standard)
             )
+        except PLCReadError as e:
+            logger.warning(f"⚠️ Read error for tag {tag.name}: {e}")
+            return None  # Не возвращаем фейковое значение
+        except PLCConnectionError as e:
+            logger.error(f"❌ Connection error for tag {tag.name}: {e}")
+            return None
+        except ValueError as e:
+            logger.error(f"❌ Invalid data type for tag {tag.name}: {e}")
+            return None
         except Exception as e:
-            print(f"⚠️ Error polling tag {tag.name}: {e}")
-            return TagValue(
-                tag_id=tag.id,
-                value=0.0,
-                timestamp=datetime.now(),
-                quality=0  # Bad
-            )
+            logger.error(f"❌ Unexpected error polling tag {tag.name}: {e}")
+            return None
 
 
 class CollectorService:
@@ -92,7 +102,7 @@ class CollectorService:
         service.stop()
     """
     
-    def __init__(self, flush_interval_sec: float = 5.0):
+    def __init__(self, flush_interval_sec: float = 5.0, retention_days: int = 30):
         self.connections: Dict[int, PLCConnection] = {}  # plc_id -> PLCConnection
         self.buffer: list[TagValue] = []  # Буфер для пакетной записи
         self.running = False
@@ -100,6 +110,11 @@ class CollectorService:
         self._lock = threading.Lock()
         self._flush_interval = flush_interval_sec
         self._last_flush = datetime.now()
+        
+        # Настройки очистки старых данных
+        self._retention_days = retention_days
+        self._cleanup_interval_hours = 6  # Очистка каждые 6 часов
+        self._last_cleanup = datetime.now()
     
     def load_configuration(self):
         """Загрузка конфигурации ПЛК и тегов из БД"""
@@ -159,25 +174,40 @@ class CollectorService:
         
         logger.info(f"Saved {len(to_write)} values to database")
     
+    def _maybe_cleanup(self):
+        """Периодическая очистка старых данных"""
+        hours_since_cleanup = (datetime.now() - self._last_cleanup).total_seconds() / 3600
+        
+        if hours_since_cleanup >= self._cleanup_interval_hours:
+            try:
+                deleted = cleanup_old_data(days=self._retention_days)
+                if deleted > 0:
+                    logger.info(f"🧹 Cleaned up {deleted} old records (>{self._retention_days} days)")
+                self._last_cleanup = datetime.now()
+            except Exception as e:
+                logger.error(f"Cleanup failed: {e}")
+    
     def _poll_cycle(self):
         """Один цикл опроса всех тегов"""
         for plc_id, conn in self.connections.items():
             for tag_id, tag in conn.tags.items():
                 if conn.should_poll(tag_id):
                     result = conn.poll_tag(tag)
-                    if result:
+                    if result is not None:
                         with self._lock:
                             self.buffer.append(result)
                         
-                        # Выводим значение в консоль
-                        quality_str = "✅" if result.quality == 192 else "❌"
-                        print(f"  {quality_str} {tag.name}: {result.value}")
+                        # Выводим значение в консоль (только успешные)
+                        logger.debug(f"✅ {tag.name}: {result.value}")
         
         # Сброс буфера при достижении лимита или по времени
         time_to_flush = (datetime.now() - self._last_flush).total_seconds() >= self._flush_interval
         if len(self.buffer) >= BATCH_INSERT_SIZE or (self.buffer and time_to_flush):
             self._flush_buffer()
             self._last_flush = datetime.now()
+        
+        # Периодическая очистка старых данных
+        self._maybe_cleanup()
     
     def _run_loop(self):
         """Главный цикл сервиса"""
@@ -253,8 +283,4 @@ class CollectorService:
                 for conn in self.connections.values()
             }
         }
-
-
-# Глобальный экземпляр сервиса
-collector = CollectorService()
 

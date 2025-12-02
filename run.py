@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from app.config.config_loader import load_config, setup_logging, get_logger
 from app.storage import init_db, get_session, PLC, Tag, TrendData
-from app.services.collector_service import CollectorService
+from app.services.collector_manager import CollectorManager, collector_status
 
 
 # Глобальный флаг для остановки симулятора
@@ -225,10 +225,8 @@ def run_collector(config, simulate=False):
     web_thread = threading.Thread(target=run_web, daemon=True)
     web_thread.start()
     
-    # Импортируем статус для обновления
-    from app.api.server import collector_status
-    
-    collector = CollectorService(
+    # Используем CollectorManager вместо прямой работы с CollectorService
+    manager = CollectorManager(
         flush_interval_sec=config.flush_interval_sec
     )
     
@@ -236,21 +234,12 @@ def run_collector(config, simulate=False):
         global _simulator_running
         logger.info("Interrupt received, stopping...")
         _simulator_running = False
-        collector.stop()
+        manager.stop()
         sys.exit(0)
     
     signal.signal(signal.SIGINT, signal_handler)
     
-    collector.start()
-    
-    # Обновляем статус для веб-интерфейса
-    collector_status["running"] = collector.running
-    
-    if collector.running:
-        for conn in collector.connections.values():
-            collector_status["connected"] = conn.client.connected
-            collector_status["plc_name"] = conn.name
-            break
+    manager.start()
     
     mode = "SIMULATION" if simulate else "PRODUCTION"
     
@@ -266,54 +255,16 @@ def run_collector(config, simulate=False):
             time.sleep(1)
             
             # Обновляем статус подключения
-            if collector.running:
-                for conn in collector.connections.values():
-                    collector_status["connected"] = conn.client.connected
-                    break
-            else:
-                collector_status["connected"] = False
+            manager.update_connection_status()
             
-            # Проверяем запрос на перезапуск
-            if collector_status.get("restart_requested"):
-                logger.info("🔄 Restart requested, reloading configuration...")
-                collector_status["restart_requested"] = False
-                
-                # Останавливаем коллектор
-                collector.stop()
-                collector.connections.clear()
-                collector.buffer.clear()
-                
-                # Перезагружаем конфигурацию
-                collector.load_configuration()
-                
-                if not collector.connections:
-                    logger.warning("⚠️ No PLCs configured")
-                    collector_status["connected"] = False
-                    collector_status["running"] = False
-                    continue
-                
-                # Переподключаемся
-                for plc_id, conn in collector.connections.items():
-                    logger.info(f"🔌 Reconnecting to PLC '{conn.name}'...")
-                    conn.client.connect()
-                    collector_status["connected"] = conn.client.connected
-                    collector_status["plc_name"] = conn.name
-                
-                # Перезапускаем
-                collector.running = True
-                collector_status["running"] = True
-                collector._thread = threading.Thread(target=collector._run_loop, daemon=True)
-                collector._thread.start()
-                
-                logger.info("✅ Collector restarted with new configuration")
+            # Проверяем запрос на перезапуск (логика теперь в CollectorManager)
+            manager.check_restart_request()
                 
     except KeyboardInterrupt:
         pass
     finally:
         _simulator_running = False
-        collector_status["running"] = False
-        collector_status["connected"] = False
-        collector.stop()
+        manager.stop()
 
 
 def main():

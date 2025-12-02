@@ -3,7 +3,7 @@
 Функции для запроса и анализа исторических данных.
 """
 from datetime import datetime, timedelta
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from sqlalchemy import func
 
 from app.storage import get_session, Tag, TrendData
@@ -52,6 +52,45 @@ def get_latest_value(tag_id: int) -> Optional[Tuple[datetime, float]]:
         if data:
             return (data.timestamp, data.value)
         return None
+
+
+def get_latest_values_batch(tag_ids: List[int]) -> Dict[int, Tuple[datetime, float]]:
+    """
+    Получение последних значений для списка тегов одним запросом.
+    Решает проблему N+1 запросов.
+    
+    Args:
+        tag_ids: Список ID тегов
+        
+    Returns:
+        Словарь {tag_id: (timestamp, value)}
+    """
+    if not tag_ids:
+        return {}
+    
+    with get_session() as session:
+        # Подзапрос для получения максимального timestamp для каждого тега
+        from sqlalchemy import func
+        
+        subquery = session.query(
+            TrendData.tag_id,
+            func.max(TrendData.timestamp).label('max_ts')
+        ).filter(
+            TrendData.tag_id.in_(tag_ids)
+        ).group_by(TrendData.tag_id).subquery()
+        
+        # Основной запрос с JOIN
+        data = session.query(
+            TrendData.tag_id,
+            TrendData.timestamp,
+            TrendData.value
+        ).join(
+            subquery,
+            (TrendData.tag_id == subquery.c.tag_id) & 
+            (TrendData.timestamp == subquery.c.max_ts)
+        ).all()
+        
+        return {row.tag_id: (row.timestamp, row.value) for row in data}
 
 
 def get_statistics(

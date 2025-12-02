@@ -1,11 +1,12 @@
 """
 Тесты для загрузчика конфигурации.
+ПЛК и теги теперь хранятся в БД, поэтому тестируем только системные настройки.
 """
 import pytest
 import tempfile
 import os
 
-from app.config.config_loader import load_config, TagConfig, PLCConfig, AppConfig
+from app.config.config_loader import load_config, AppConfig
 
 
 class TestConfigLoader:
@@ -20,34 +21,6 @@ class TestConfigLoader:
         assert config.batch_size == 5
         assert config.flush_interval_sec == 1
     
-    def test_load_plcs(self, temp_config_file):
-        """Загрузка ПЛК из конфигурации"""
-        config = load_config(temp_config_file)
-        
-        assert len(config.plcs) == 1
-        plc = config.plcs[0]
-        
-        assert isinstance(plc, PLCConfig)
-        assert plc.name == "TestPLC"
-        assert plc.ip == "127.0.0.1"
-        assert plc.port == 2000
-        assert plc.enabled == True
-    
-    def test_load_tags(self, temp_config_file):
-        """Загрузка тегов из конфигурации"""
-        config = load_config(temp_config_file)
-        
-        plc = config.plcs[0]
-        assert len(plc.tags) == 1
-        
-        tag = plc.tags[0]
-        assert isinstance(tag, TagConfig)
-        assert tag.name == "TestTag"
-        assert tag.db == 1
-        assert tag.address == 0
-        assert tag.type == "real"
-        assert tag.size == 4
-    
     def test_config_not_found(self):
         """Ошибка при отсутствии файла"""
         with pytest.raises(FileNotFoundError):
@@ -56,10 +29,12 @@ class TestConfigLoader:
     def test_default_values(self):
         """Значения по умолчанию"""
         config_content = """
-plcs: []
+# Minimal config
+database:
+  url: "sqlite:///trends.db"
 """
         fd, path = tempfile.mkstemp(suffix='.yaml')
-        with os.fdopen(fd, 'w') as f:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
             f.write(config_content)
         
         try:
@@ -67,80 +42,121 @@ plcs: []
             
             # Проверяем дефолты
             assert config.database_url == "sqlite:///trends.db"
-            assert config.batch_size == 10
+            assert config.batch_size == 100  # default from config_loader
             assert config.flush_interval_sec == 5
             assert config.retention_days == 30
             assert config.log_level == "INFO"
+            assert config.api_host == "127.0.0.1"
+            assert config.api_port == 8000
         finally:
             os.unlink(path)
     
-    def test_multiple_plcs(self):
-        """Множественные ПЛК"""
+    def test_custom_api_settings(self):
+        """Custom API settings"""
         config_content = """
-plcs:
-  - name: "PLC1"
-    ip: "192.168.1.10"
-    enabled: true
-    tags: []
-  - name: "PLC2"
-    ip: "192.168.1.20"
-    enabled: false
-    tags: []
-  - name: "PLC3"
-    ip: "192.168.1.30"
-    enabled: true
-    tags: []
+database:
+  url: "sqlite:///custom.db"
+  
+api:
+  host: "0.0.0.0"
+  port: 9000
 """
         fd, path = tempfile.mkstemp(suffix='.yaml')
-        with os.fdopen(fd, 'w') as f:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
             f.write(config_content)
         
         try:
             config = load_config(path)
             
-            assert len(config.plcs) == 3
-            assert config.plcs[0].enabled == True
-            assert config.plcs[1].enabled == False
-            assert config.plcs[2].enabled == True
+            assert config.api_host == "0.0.0.0"
+            assert config.api_port == 9000
+        finally:
+            os.unlink(path)
+    
+    def test_collector_settings(self):
+        """Collector settings"""
+        config_content = """
+database:
+  url: "sqlite:///trends.db"
+
+collector:
+  batch_size: 50
+  flush_interval_sec: 10
+  reconnect_delay_sec: 30
+"""
+        fd, path = tempfile.mkstemp(suffix='.yaml')
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            f.write(config_content)
+        
+        try:
+            config = load_config(path)
+            
+            assert config.batch_size == 50
+            assert config.flush_interval_sec == 10
+            assert config.reconnect_delay_sec == 30
+        finally:
+            os.unlink(path)
+    
+    def test_storage_settings(self):
+        """Storage settings"""
+        config_content = """
+database:
+  url: "sqlite:///trends.db"
+
+storage:
+  retention_days: 90
+"""
+        fd, path = tempfile.mkstemp(suffix='.yaml')
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            f.write(config_content)
+        
+        try:
+            config = load_config(path)
+            
+            assert config.retention_days == 90
+        finally:
+            os.unlink(path)
+    
+    def test_logging_settings(self):
+        """Logging settings"""
+        config_content = """
+database:
+  url: "sqlite:///trends.db"
+
+logging:
+  level: "DEBUG"
+  file: "logs/custom.log"
+"""
+        fd, path = tempfile.mkstemp(suffix='.yaml')
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            f.write(config_content)
+        
+        try:
+            config = load_config(path)
+            
+            assert config.log_level == "DEBUG"
+            assert config.log_file == "logs/custom.log"
         finally:
             os.unlink(path)
 
 
-class TestTagConfig:
-    """Тесты TagConfig dataclass"""
+class TestAppConfig:
+    """Тесты AppConfig dataclass"""
     
-    def test_tag_config_creation(self):
-        """Создание TagConfig"""
-        tag = TagConfig(
-            name="Test",
-            description="Test tag",
-            db=1,
-            address=0,
-            type="real",
-            size=4,
-            poll_ms=1000
+    def test_app_config_creation(self):
+        """Создание AppConfig"""
+        config = AppConfig(
+            database_url="sqlite:///test.db",
+            batch_size=10,
+            flush_interval_sec=5.0,
+            reconnect_delay_sec=5,
+            retention_days=30,
+            api_host="127.0.0.1",
+            api_port=8000,
+            log_level="INFO",
+            log_file="logs/test.log"
         )
         
-        assert tag.name == "Test"
-        assert tag.poll_ms == 1000
-
-
-class TestPLCConfig:
-    """Тесты PLCConfig dataclass"""
-    
-    def test_plc_config_creation(self):
-        """Создание PLCConfig"""
-        plc = PLCConfig(
-            name="TestPLC",
-            ip="192.168.1.10",
-            port=102,
-            rack=0,
-            slot=1,
-            enabled=True,
-            tags=[]
-        )
-        
-        assert plc.name == "TestPLC"
-        assert plc.port == 102
-        assert len(plc.tags) == 0
-
+        assert config.database_url == "sqlite:///test.db"
+        assert config.batch_size == 10
+        assert config.api_port == 8000
