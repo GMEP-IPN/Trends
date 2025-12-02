@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trends Collector</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a24;
+            --bg-hover: #22222e;
+            --accent: #00d4aa;
+            --accent-dim: #00d4aa33;
+            --accent-secondary: #7c3aed;
+            --text-primary: #e4e4e7;
+            --text-secondary: #71717a;
+            --text-muted: #52525b;
+            --border: #27272a;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+        
+        .logo-text {
+            font-size: 1.25rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-card);
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        /* Main Layout */
+        .main {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            min-height: calc(100vh - 69px);
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+        
+        .sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .sidebar-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+        
+        .add-btn {
+            width: 28px;
+            height: 28px;
+            background: var(--accent);
+            border: none;
+            border-radius: 8px;
+            color: var(--bg-primary);
+            font-size: 1.25rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        
+        .add-btn:hover {
+            background: var(--success);
+            transform: scale(1.1);
+        }
+        
+        .tag-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .tag-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        
+        .tag-item:hover {
+            background: var(--bg-hover);
+            border-color: var(--accent-dim);
+        }
+        
+        .tag-item.active {
+            border-color: var(--accent);
+            box-shadow: 0 0 20px var(--accent-dim);
+        }
+        
+        .tag-name {
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+        
+        .tag-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+        
+        .tag-meta {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+        }
+        
+        .tag-delete {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            width: 24px;
+            height: 24px;
+            background: var(--danger);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.2s;
+            font-size: 0.875rem;
+        }
+        
+        .tag-item:hover .tag-delete {
+            opacity: 1;
+        }
+        
+        .tag-delete:hover {
+            background: #dc2626;
+        }
+        
+        /* Content */
+        .content {
+            padding: 2rem;
+            overflow-y: auto;
+        }
+        
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem;
+        }
+        
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 2rem;
+            font-weight: 600;
+        }
+        
+        .stat-value.accent { color: var(--accent); }
+        .stat-value.secondary { color: var(--accent-secondary); }
+        .stat-value.warning { color: var(--warning); }
+        .stat-value.success { color: var(--success); }
+        
+        /* Chart Container */
+        .chart-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        .chart-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+        
+        .time-selector {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .time-btn {
+            padding: 0.5rem 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .time-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+        
+        .time-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: var(--bg-primary);
+        }
+        
+        .chart-wrapper {
+            height: 400px;
+            position: relative;
+        }
+        
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+        
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 2rem;
+            width: 100%;
+            max-width: 480px;
+            transform: scale(0.9);
+            transition: all 0.3s;
+        }
+        
+        .modal-overlay.active .modal {
+            transform: scale(1);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 1.25rem;
+            transition: all 0.2s;
+        }
+        
+        .modal-close:hover {
+            background: var(--danger);
+            border-color: var(--danger);
+            color: white;
+        }
+        
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+        }
+        
+        .form-input, .form-select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+        
+        .form-input:focus, .form-select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-dim);
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        
+        .form-hint {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+        
+        .btn {
+            padding: 0.875rem 1.5rem;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: var(--accent);
+            color: var(--bg-primary);
+        }
+        
+        .btn-primary:hover {
+            background: var(--success);
+        }
+        
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--bg-hover);
+        }
+        
+        .modal-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+        
+        .modal-actions .btn {
+            flex: 1;
+        }
+        
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            padding: 1rem 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 1100;
+        }
+        
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        
+        .toast.success { border-color: var(--success); }
+        .toast.error { border-color: var(--danger); }
+        
+        .toast-icon {
+            font-size: 1.25rem;
+        }
+        
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .main {
+                grid-template-columns: 1fr;
+            }
+            
+            .sidebar {
+                display: none;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 640px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header {
+                padding: 1rem;
+            }
+            
+            .modal {
+                margin: 1rem;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">
+            <div class="logo-icon">📊</div>
+            <span class="logo-text">Trends Collector</span>
+        </div>
+        <div class="status-badge">
+            <span class="status-dot"></span>
+            <span id="statusText">Подключено</span>
+        </div>
+    </header>
+    
+    <main class="main">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-title">Теги</div>
+                <button class="add-btn" onclick="openModal()" title="Добавить тег">+</button>
+            </div>
+            <div class="tag-list" id="tagList">
+                <!-- Tags will be loaded here -->
+            </div>
+        </aside>
+        
+        <section class="content">
+            <!-- Stats -->
+            <div class="stats-grid" id="statsGrid">
+                <div class="stat-card">
+                    <div class="stat-label">Текущее значение</div>
+                    <div class="stat-value accent" id="currentValue">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Минимум</div>
+                    <div class="stat-value secondary" id="minValue">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Максимум</div>
+                    <div class="stat-value warning" id="maxValue">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Среднее</div>
+                    <div class="stat-value success" id="avgValue">--</div>
+                </div>
+            </div>
+            
+            <!-- Chart -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h2 class="chart-title" id="chartTitle">Выберите тег</h2>
+                    <div class="time-selector">
+                        <button class="time-btn" data-minutes="5">5м</button>
+                        <button class="time-btn" data-minutes="15">15м</button>
+                        <button class="time-btn active" data-minutes="60">1ч</button>
+                        <button class="time-btn" data-minutes="360">6ч</button>
+                        <button class="time-btn" data-minutes="1440">24ч</button>
+                    </div>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+        </section>
+    </main>
+    
+    <!-- Add Tag Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">➕ Добавить тег</h3>
+                <button class="modal-close" onclick="closeModal()">×</button>
+            </div>
+            
+            <form id="tagForm" onsubmit="submitTag(event)">
+                <div class="form-group">
+                    <label class="form-label">Имя тега</label>
+                    <input type="text" class="form-input" id="tagName" placeholder="Temperature" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Описание</label>
+                    <input type="text" class="form-input" id="tagDescription" placeholder="Температура в помещении">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">DB номер</label>
+                        <input type="number" class="form-input" id="tagDbNumber" placeholder="1" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Адрес (байт)</label>
+                        <input type="number" class="form-input" id="tagAddress" placeholder="0" min="0" required>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Тип данных</label>
+                        <select class="form-select" id="tagDataType" onchange="updateDataSize()">
+                            <option value="real" data-size="4">REAL (4 байта)</option>
+                            <option value="int" data-size="2">INT (2 байта)</option>
+                            <option value="dint" data-size="4">DINT (4 байта)</option>
+                            <option value="word" data-size="2">WORD (2 байта)</option>
+                            <option value="dword" data-size="4">DWORD (4 байта)</option>
+                            <option value="bool" data-size="1">BOOL (1 байт)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Интервал опроса</label>
+                        <select class="form-select" id="tagPollInterval">
+                            <option value="500">500 мс</option>
+                            <option value="1000" selected>1 сек</option>
+                            <option value="2000">2 сек</option>
+                            <option value="5000">5 сек</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <input type="hidden" id="tagDataSize" value="4">
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Добавить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Toast -->
+    <div class="toast" id="toast">
+        <span class="toast-icon" id="toastIcon">✅</span>
+        <span id="toastMessage">Сообщение</span>
+    </div>
+    
+    <script>
+        // State
+        let selectedTagId = null;
+        let selectedMinutes = 60;
+        let chart = null;
+        let updateInterval = null;
+        
+        // Chart configuration
+        const chartConfig = {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'Значение',
+                    data: [],
+                    borderColor: '#00d4aa',
+                    backgroundColor: 'rgba(0, 212, 170, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 6,
+                    pointHoverBackgroundColor: '#00d4aa',
+                    pointHoverBorderColor: '#fff',
+                    pointHoverBorderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: '#1a1a24',
+                        titleColor: '#e4e4e7',
+                        bodyColor: '#00d4aa',
+                        bodyFont: {
+                            family: 'JetBrains Mono',
+                            size: 14
+                        },
+                        borderColor: '#27272a',
+                        borderWidth: 1,
+                        padding: 12,
+                        displayColors: false,
+                        callbacks: {
+                            label: ctx => ctx.parsed.y.toFixed(2)
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            displayFormats: {
+                                minute: 'HH:mm',
+                                hour: 'HH:mm'
+                            }
+                        },
+                        grid: {
+                            color: '#27272a',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#71717a',
+                            font: {
+                                family: 'JetBrains Mono'
+                            }
+                        }
+                    },
+                    y: {
+                        grid: {
+                            color: '#27272a',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#71717a',
+                            font: {
+                                family: 'JetBrains Mono'
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        
+        // Initialize chart
+        function initChart() {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            chart = new Chart(ctx, chartConfig);
+        }
+        
+        // Load tags
+        async function loadTags() {
+            try {
+                const response = await fetch('/api/tags');
+                const tags = await response.json();
+                
+                const tagList = document.getElementById('tagList');
+                tagList.innerHTML = tags.map(tag => `
+                    <div class="tag-item ${selectedTagId === tag.id ? 'active' : ''}" 
+                         data-id="${tag.id}" 
+                         onclick="selectTag(${tag.id}, '${tag.name}')">
+                        <button class="tag-delete" onclick="deleteTag(event, ${tag.id}, '${tag.name}')" title="Удалить">×</button>
+                        <div class="tag-name">${tag.name}</div>
+                        <div class="tag-value">${tag.latest_value !== null ? tag.latest_value.toFixed(2) : '--'}</div>
+                        <div class="tag-meta">DB${tag.db_number}.${tag.data_type.toUpperCase()}${tag.start_address}</div>
+                    </div>
+                `).join('');
+                
+                // Auto-select first tag
+                if (tags.length > 0 && !selectedTagId) {
+                    selectTag(tags[0].id, tags[0].name);
+                }
+            } catch (error) {
+                console.error('Error loading tags:', error);
+            }
+        }
+        
+        // Select tag
+        async function selectTag(tagId, tagName) {
+            selectedTagId = tagId;
+            
+            // Update UI
+            document.querySelectorAll('.tag-item').forEach(el => {
+                el.classList.toggle('active', parseInt(el.dataset.id) === tagId);
+            });
+            
+            document.getElementById('chartTitle').textContent = tagName;
+            
+            // Load data
+            await loadTrendData();
+            await loadStatistics();
+            
+            // Start auto-update
+            if (updateInterval) clearInterval(updateInterval);
+            updateInterval = setInterval(() => {
+                loadTrendData();
+                loadStatistics();
+                loadTags();
+            }, 5000);
+        }
+        
+        // Load trend data
+        async function loadTrendData() {
+            if (!selectedTagId) return;
+            
+            try {
+                const response = await fetch(`/api/tags/${selectedTagId}/trend?minutes=${selectedMinutes}`);
+                const data = await response.json();
+                
+                chart.data.datasets[0].data = data.map(point => ({
+                    x: new Date(point.timestamp),
+                    y: point.value
+                }));
+                chart.update('none');
+            } catch (error) {
+                console.error('Error loading trend data:', error);
+            }
+        }
+        
+        // Load statistics
+        async function loadStatistics() {
+            if (!selectedTagId) return;
+            
+            try {
+                const response = await fetch(`/api/tags/${selectedTagId}/statistics?minutes=${selectedMinutes}`);
+                const stats = await response.json();
+                
+                document.getElementById('minValue').textContent = stats.min?.toFixed(2) ?? '--';
+                document.getElementById('maxValue').textContent = stats.max?.toFixed(2) ?? '--';
+                document.getElementById('avgValue').textContent = stats.avg?.toFixed(2) ?? '--';
+                
+                // Get latest value
+                const latestResponse = await fetch(`/api/tags/${selectedTagId}/latest`);
+                if (latestResponse.ok) {
+                    const latest = await latestResponse.json();
+                    document.getElementById('currentValue').textContent = latest.value.toFixed(2);
+                }
+            } catch (error) {
+                console.error('Error loading statistics:', error);
+            }
+        }
+        
+        // Time selector
+        document.querySelectorAll('.time-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                selectedMinutes = parseInt(btn.dataset.minutes);
+                loadTrendData();
+                loadStatistics();
+            });
+        });
+        
+        // Modal functions
+        function openModal() {
+            document.getElementById('modalOverlay').classList.add('active');
+            document.getElementById('tagName').focus();
+        }
+        
+        function closeModal() {
+            document.getElementById('modalOverlay').classList.remove('active');
+            document.getElementById('tagForm').reset();
+        }
+        
+        function updateDataSize() {
+            const select = document.getElementById('tagDataType');
+            const size = select.options[select.selectedIndex].dataset.size;
+            document.getElementById('tagDataSize').value = size;
+        }
+        
+        // Submit tag
+        async function submitTag(event) {
+            event.preventDefault();
+            
+            const data = {
+                name: document.getElementById('tagName').value,
+                description: document.getElementById('tagDescription').value,
+                db_number: parseInt(document.getElementById('tagDbNumber').value),
+                start_address: parseInt(document.getElementById('tagAddress').value),
+                data_type: document.getElementById('tagDataType').value,
+                data_size: parseInt(document.getElementById('tagDataSize').value),
+                poll_interval_ms: parseInt(document.getElementById('tagPollInterval').value)
+            };
+            
+            try {
+                const response = await fetch('/api/tags', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showToast(`Тег "${result.name}" добавлен`, 'success');
+                    closeModal();
+                    loadTags();
+                } else {
+                    const error = await response.json();
+                    showToast(error.detail || 'Ошибка создания тега', 'error');
+                }
+            } catch (error) {
+                showToast('Ошибка сети', 'error');
+            }
+        }
+        
+        // Delete tag
+        async function deleteTag(event, tagId, tagName) {
+            event.stopPropagation();
+            
+            if (!confirm(`Удалить тег "${tagName}"?`)) return;
+            
+            try {
+                const response = await fetch(`/api/tags/${tagId}`, { method: 'DELETE' });
+                
+                if (response.ok) {
+                    showToast(`Тег "${tagName}" удалён`, 'success');
+                    if (selectedTagId === tagId) {
+                        selectedTagId = null;
+                    }
+                    loadTags();
+                } else {
+                    showToast('Ошибка удаления', 'error');
+                }
+            } catch (error) {
+                showToast('Ошибка сети', 'error');
+            }
+        }
+        
+        // Toast
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const icon = document.getElementById('toastIcon');
+            const msg = document.getElementById('toastMessage');
+            
+            toast.className = 'toast ' + type;
+            icon.textContent = type === 'success' ? '✅' : '❌';
+            msg.textContent = message;
+            
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+        
+        // Close modal on overlay click
+        document.getElementById('modalOverlay').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeModal();
+        });
+        
+        // Close modal on Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            loadTags();
+        });
+    </script>
+</body>
+</html>

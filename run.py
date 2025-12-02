@@ -4,6 +4,8 @@ Trends Collector - Точка входа
 Использование:
     python run.py                    - Запуск сбора данных
     python run.py --simulate         - Запуск в режиме симуляции (встроенный симулятор)
+    python run.py --web              - Запуск веб-интерфейса
+    python run.py --simulate --web   - Симуляция + веб-интерфейс
     python run.py --init             - Инициализация БД из config.yaml
     python run.py --test-connection  - Проверка подключения к ПЛК
     python run.py --list-tags        - Показать настроенные теги
@@ -252,12 +254,13 @@ def show_status():
     print("\n" + "="*60)
 
 
-def run_collector(config, simulate=False):
-    """Запуск коллектора (опционально с симулятором)"""
+def run_collector(config, simulate=False, web=False):
+    """Запуск коллектора (опционально с симулятором и веб-интерфейсом)"""
     global _simulator_running
     
     logger = get_logger()
     simulator_thread = None
+    web_thread = None
     
     # Запуск симулятора в отдельном потоке
     if simulate:
@@ -268,6 +271,17 @@ def run_collector(config, simulate=False):
         # Даём симулятору время запуститься
         import time
         time.sleep(2)
+    
+    # Запуск веб-сервера в отдельном потоке
+    if web:
+        def run_web():
+            import uvicorn
+            from app.api.server import app
+            uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+        
+        logger.info("🌐 Starting web server at http://127.0.0.1:8000")
+        web_thread = threading.Thread(target=run_web, daemon=True)
+        web_thread.start()
     
     collector = CollectorService(
         flush_interval_sec=config.flush_interval_sec
@@ -289,9 +303,17 @@ def run_collector(config, simulate=False):
         _simulator_running = False
         return
     
-    mode = "SIMULATION" if simulate else "PRODUCTION"
+    mode_parts = []
+    if simulate:
+        mode_parts.append("SIMULATION")
+    if web:
+        mode_parts.append("WEB")
+    mode = " + ".join(mode_parts) if mode_parts else "PRODUCTION"
+    
     print("\n" + "="*50)
     print(f"📊 Collector running [{mode}]. Press Ctrl+C to stop.")
+    if web:
+        print(f"🌐 Open http://127.0.0.1:8000 in your browser")
     print("="*50 + "\n")
     
     try:
@@ -313,6 +335,8 @@ def main():
                         help='Инициализация БД из config.yaml')
     parser.add_argument('--simulate', '-s', action='store_true',
                         help='Запуск в режиме симуляции (встроенный симулятор)')
+    parser.add_argument('--web', '-w', action='store_true',
+                        help='Запуск веб-интерфейса')
     parser.add_argument('--test-connection', action='store_true',
                         help='Проверка подключения к ПЛК')
     parser.add_argument('--list-tags', action='store_true',
@@ -345,7 +369,7 @@ def main():
     elif args.status:
         show_status()
     else:
-        run_collector(config, simulate=args.simulate)
+        run_collector(config, simulate=args.simulate, web=args.web)
 
 
 if __name__ == "__main__":
