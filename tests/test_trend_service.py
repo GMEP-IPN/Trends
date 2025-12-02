@@ -152,14 +152,96 @@ class TestTrendService:
         assert session.query(TrendData).count() == 5
 
 
-class TestGetAllTags:
-    """Тесты функции get_all_tags"""
+class TestGetLatestValuesBatch:
+    """Tests for get_latest_values_batch function"""
     
-    def test_get_all_tags(self, temp_db, sample_tag):
-        """Получение списка всех тегов"""
+    def test_batch_empty_list(self, temp_db):
+        """Empty tag_ids list returns empty dict"""
         session, _ = temp_db
         
-        # Добавляем значение
+        with patch('app.services.trend_service.get_session') as mock_session:
+            mock_session.return_value.__enter__ = MagicMock(return_value=session)
+            mock_session.return_value.__exit__ = MagicMock(return_value=False)
+            
+            from app.services.trend_service import get_latest_values_batch
+            
+            result = get_latest_values_batch([])
+            
+            assert result == {}
+    
+    def test_batch_single_tag(self, temp_db, sample_tag):
+        """Batch query for single tag"""
+        session, _ = temp_db
+        
+        now = datetime.now()
+        session.add(TrendData(tag_id=sample_tag.id, timestamp=now, value=42.0))
+        session.commit()
+        
+        with patch('app.services.trend_service.get_session') as mock_session:
+            mock_session.return_value.__enter__ = MagicMock(return_value=session)
+            mock_session.return_value.__exit__ = MagicMock(return_value=False)
+            
+            from app.services.trend_service import get_latest_values_batch
+            
+            result = get_latest_values_batch([sample_tag.id])
+            
+            assert sample_tag.id in result
+            assert result[sample_tag.id][1] == 42.0
+    
+    def test_batch_multiple_values_returns_latest(self, temp_db, sample_tag):
+        """Batch returns only latest value per tag"""
+        session, _ = temp_db
+        
+        now = datetime.now()
+        # Old value
+        session.add(TrendData(
+            tag_id=sample_tag.id, 
+            timestamp=now - timedelta(hours=1), 
+            value=10.0
+        ))
+        # Latest value
+        session.add(TrendData(
+            tag_id=sample_tag.id, 
+            timestamp=now, 
+            value=99.0
+        ))
+        session.commit()
+        
+        with patch('app.services.trend_service.get_session') as mock_session:
+            mock_session.return_value.__enter__ = MagicMock(return_value=session)
+            mock_session.return_value.__exit__ = MagicMock(return_value=False)
+            
+            from app.services.trend_service import get_latest_values_batch
+            
+            result = get_latest_values_batch([sample_tag.id])
+            
+            assert result[sample_tag.id][1] == 99.0  # Latest, not 10.0
+    
+    def test_batch_missing_tags(self, temp_db, sample_tag):
+        """Tags without data are not in result"""
+        session, _ = temp_db
+        
+        with patch('app.services.trend_service.get_session') as mock_session:
+            mock_session.return_value.__enter__ = MagicMock(return_value=session)
+            mock_session.return_value.__exit__ = MagicMock(return_value=False)
+            
+            from app.services.trend_service import get_latest_values_batch
+            
+            # Tag exists but no trend data
+            result = get_latest_values_batch([sample_tag.id, 999])
+            
+            assert sample_tag.id not in result
+            assert 999 not in result
+
+
+class TestGetAllTags:
+    """Tests for get_all_tags function"""
+    
+    def test_get_all_tags(self, temp_db, sample_tag):
+        """Get list of all tags"""
+        session, _ = temp_db
+        
+        # Add value
         session.add(TrendData(
             tag_id=sample_tag.id,
             value=25.5
@@ -170,7 +252,7 @@ class TestGetAllTags:
             mock_session.return_value.__enter__ = MagicMock(return_value=session)
             mock_session.return_value.__exit__ = MagicMock(return_value=False)
             
-            # Мокаем get_latest_value
+            # Mock get_latest_value
             with patch('app.services.trend_service.get_latest_value') as mock_latest:
                 mock_latest.return_value = (datetime.now(), 25.5)
                 

@@ -12,6 +12,13 @@ from typing import Optional, Any
 
 logger = logging.getLogger('trends')
 
+# Snap7 exception - may vary between versions
+try:
+    Snap7Exception = snap7.snap7exceptions.Snap7Exception
+except AttributeError:
+    # Newer versions of snap7 may use different exception hierarchy
+    Snap7Exception = RuntimeError
+
 
 class PLCConnectionError(Exception):
     """Ошибка подключения к ПЛК"""
@@ -86,7 +93,7 @@ class PLC:
                 self.connected = True
                 logger.info(f"✅ Connected to PLC at {self.plc_ip}:{self.tcp_port}")
                 return True
-            except snap7.snap7exceptions.Snap7Exception as read_err:
+            except (Snap7Exception, RuntimeError) as read_err:
                 self.connected = False
                 logger.warning(f"⚠️ Connection test failed to {self.plc_ip}:{self.tcp_port}: {read_err}")
                 try:
@@ -95,7 +102,7 @@ class PLC:
                     pass
                 return False
                 
-        except snap7.snap7exceptions.Snap7Exception as e:
+        except (Snap7Exception, RuntimeError) as e:
             logger.warning(f"⚠️ Connection failed to {self.plc_ip}:{self.tcp_port}: {e}")
             self.connected = False
             return False
@@ -110,7 +117,7 @@ class PLC:
             try:
                 self.client.disconnect()
                 logger.info(f"🔌 Disconnected from PLC {self.plc_ip}:{self.tcp_port}")
-            except snap7.snap7exceptions.Snap7Exception as e:
+            except (Snap7Exception, RuntimeError) as e:
                 logger.warning(f"Warning during disconnect: {e}")
             except Exception as e:
                 logger.error(f"Unexpected error during disconnect: {e}")
@@ -184,7 +191,7 @@ class PLC:
             raw = self.client.db_read(db_number, start, size)
             return self.parsers[type_data](raw)
 
-        except snap7.snap7exceptions.Snap7Exception as e:
+        except (Snap7Exception, RuntimeError) as e:
             logger.warning(f"⚠️ Read failed (DB{db_number}.{start}): {e}")
             self.connected = False
             
@@ -193,7 +200,7 @@ class PLC:
                 self.ensure_connection(timeout_attempts=3)
                 raw = self.client.db_read(db_number, start, size)
                 return self.parsers[type_data](raw)
-            except (PLCConnectionError, snap7.snap7exceptions.Snap7Exception) as retry_err:
+            except (PLCConnectionError, Snap7Exception, RuntimeError) as retry_err:
                 raise PLCReadError(f"Failed to read DB{db_number}.{start} after retry: {retry_err}")
         
         except Exception as e:
