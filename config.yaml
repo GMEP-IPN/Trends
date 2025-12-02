@@ -69,7 +69,7 @@ plcs:
         size: 2
         poll_ms: 1000
 
-  # Симулятор для тестирования
+  # Симулятор комнаты для тестирования
   - name: "SimPLC"
     ip: "127.0.0.1"
     port: 2000
@@ -78,11 +78,20 @@ plcs:
     enabled: true           # ✅ Включён для тестов
     
     tags:
-      - name: "TestCounter"
+      - name: "RoomTemperature"
+        description: "Температура в комнате"
         db: 1
-        address: 2
-        type: "int"
-        size: 2
+        address: 0
+        type: "real"
+        size: 4
+        poll_ms: 1000
+        
+      - name: "RoomHumidity"
+        description: "Влажность в комнате"
+        db: 1
+        address: 4
+        type: "real"
+        size: 4
         poll_ms: 1000
 
 # ===========================================
