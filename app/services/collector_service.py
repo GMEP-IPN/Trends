@@ -4,6 +4,7 @@
 """
 import threading
 import time
+import logging
 from datetime import datetime
 from typing import Dict, Optional
 from dataclasses import dataclass
@@ -11,6 +12,8 @@ from dataclasses import dataclass
 from app.storage import get_session, PLC, Tag, TrendData
 from app.collectors.S7Comm.siemens_s7 import PLC as S7Client
 from app.config.settings import BATCH_INSERT_SIZE
+
+logger = logging.getLogger('trends')
 
 
 @dataclass
@@ -153,7 +156,7 @@ class CollectorService:
                 )
                 session.add(trend)
         
-        print(f"💾 Saved {len(to_write)} values to database")
+        logger.info(f"Saved {len(to_write)} values to database")
     
     def _poll_cycle(self):
         """Один цикл опроса всех тегов"""

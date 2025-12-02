@@ -1,103 +1,265 @@
 """
-Точка входа для запуска сервиса сбора данных.
+Trends Collector - Точка входа
 
 Использование:
-    python run.py              - запуск сервиса сбора
-    python run.py --init-db    - инициализация БД
-    python run.py --demo       - добавить демо-данные и запустить
+    python run.py                    - Запуск сбора данных
+    python run.py --init             - Инициализация БД из config.yaml
+    python run.py --test-connection  - Проверка подключения к ПЛК
+    python run.py --list-tags        - Показать настроенные теги
+    python run.py --status           - Статус системы
 """
 import sys
 import signal
-from app.storage import init_db, get_session, PLC, Tag
-from app.services import collector
+import argparse
+from pathlib import Path
+
+# Добавляем корень проекта в путь
+sys.path.insert(0, str(Path(__file__).parent))
+
+from app.config.config_loader import load_config, setup_logging, get_logger
+from app.storage import init_db, get_session, PLC, Tag, TrendData
+from app.services.collector_service import CollectorService
 
 
-def add_demo_config():
-    """Добавление демо-конфигурации для тестирования с plcsim.py"""
+def init_from_config(config):
+    """Инициализация БД из config.yaml"""
+    logger = get_logger()
+    logger.info("Initializing database from config.yaml...")
+    
+    # Создаём таблицы
+    init_db()
+    
     with get_session() as session:
-        # Проверяем, есть ли уже ПЛК
-        existing = session.query(PLC).filter(PLC.name == "SimPLC").first()
-        if existing:
-            print("ℹ️ Demo configuration already exists")
-            return
+        for plc_cfg in config.plcs:
+            if not plc_cfg.enabled:
+                logger.info(f"  Skipping disabled PLC: {plc_cfg.name}")
+                continue
+            
+            # Проверяем, есть ли уже такой ПЛК
+            existing_plc = session.query(PLC).filter(PLC.name == plc_cfg.name).first()
+            
+            if existing_plc:
+                logger.info(f"  Updating PLC: {plc_cfg.name}")
+                existing_plc.ip_address = plc_cfg.ip
+                existing_plc.tcp_port = plc_cfg.port
+                existing_plc.rack = plc_cfg.rack
+                existing_plc.slot = plc_cfg.slot
+                existing_plc.is_active = True
+                plc = existing_plc
+            else:
+                logger.info(f"  Creating PLC: {plc_cfg.name} ({plc_cfg.ip}:{plc_cfg.port})")
+                plc = PLC(
+                    name=plc_cfg.name,
+                    ip_address=plc_cfg.ip,
+                    tcp_port=plc_cfg.port,
+                    rack=plc_cfg.rack,
+                    slot=plc_cfg.slot,
+                    is_active=True
+                )
+                session.add(plc)
+                session.flush()
+            
+            # Добавляем/обновляем теги
+            for tag_cfg in plc_cfg.tags:
+                existing_tag = session.query(Tag).filter(
+                    Tag.plc_id == plc.id,
+                    Tag.name == tag_cfg.name
+                ).first()
+                
+                if existing_tag:
+                    logger.info(f"    Updating tag: {tag_cfg.name}")
+                    existing_tag.db_number = tag_cfg.db
+                    existing_tag.start_address = tag_cfg.address
+                    existing_tag.data_type = tag_cfg.type
+                    existing_tag.data_size = tag_cfg.size
+                    existing_tag.poll_interval_ms = tag_cfg.poll_ms
+                    existing_tag.description = tag_cfg.description
+                else:
+                    logger.info(f"    Creating tag: {tag_cfg.name} (DB{tag_cfg.db}.{tag_cfg.address})")
+                    tag = Tag(
+                        plc_id=plc.id,
+                        name=tag_cfg.name,
+                        description=tag_cfg.description,
+                        db_number=tag_cfg.db,
+                        start_address=tag_cfg.address,
+                        data_type=tag_cfg.type,
+                        data_size=tag_cfg.size,
+                        poll_interval_ms=tag_cfg.poll_ms,
+                        is_active=True
+                    )
+                    session.add(tag)
+    
+    logger.info("Database initialized successfully!")
+
+
+def test_connection(config):
+    """Проверка подключения к ПЛК"""
+    from app.collectors.S7Comm.siemens_s7 import PLC as S7Client
+    
+    logger = get_logger()
+    logger.info("Testing PLC connections...")
+    
+    for plc_cfg in config.plcs:
+        if not plc_cfg.enabled:
+            continue
+            
+        logger.info(f"\nTesting {plc_cfg.name} ({plc_cfg.ip}:{plc_cfg.port})...")
         
-        # Создаём симулятор ПЛК
-        plc = PLC(
-            name="SimPLC",
-            ip_address="127.0.0.1",
-            tcp_port=2000,
-            rack=0,
-            slot=1,
-            is_active=True
+        client = S7Client(
+            plc_ip=plc_cfg.ip,
+            tcp_port=plc_cfg.port,
+            rack=plc_cfg.rack,
+            slot=plc_cfg.slot,
+            reconnect_delay=1
         )
-        session.add(plc)
-        session.flush()
         
-        # Создаём тег для чтения INT из DB1.DBW2 (как в plcsim.py)
-        tag = Tag(
-            plc_id=plc.id,
-            name="Counter",
-            description="Test counter from simulator",
-            db_number=1,
-            start_address=2,
-            data_type="int",
-            data_size=2,
-            poll_interval_ms=1000,
-            is_active=True
-        )
-        session.add(tag)
+        try:
+            client.connect()
+            if client.connected:
+                logger.info(f"  ✅ Connected successfully!")
+                
+                # Пробуем прочитать первый тег
+                if plc_cfg.tags:
+                    tag = plc_cfg.tags[0]
+                    try:
+                        value = client.read_db(tag.db, tag.address, tag.size, tag.type)
+                        logger.info(f"  ✅ Test read {tag.name}: {value}")
+                    except Exception as e:
+                        logger.warning(f"  ⚠️ Read failed: {e}")
+                
+                client.disconnect()
+            else:
+                logger.error(f"  ❌ Connection failed")
+        except Exception as e:
+            logger.error(f"  ❌ Error: {e}")
+
+
+def list_tags(config):
+    """Показать настроенные теги"""
+    logger = get_logger()
+    
+    print("\n" + "="*60)
+    print("📋 CONFIGURED TAGS")
+    print("="*60)
+    
+    for plc_cfg in config.plcs:
+        status = "✅" if plc_cfg.enabled else "❌"
+        print(f"\n{status} PLC: {plc_cfg.name} ({plc_cfg.ip}:{plc_cfg.port})")
+        print(f"   Rack: {plc_cfg.rack}, Slot: {plc_cfg.slot}")
+        print(f"   Tags ({len(plc_cfg.tags)}):")
         
-        print("✅ Demo configuration added:")
-        print(f"   PLC: {plc.name} ({plc.ip_address}:{plc.tcp_port})")
-        print(f"   Tag: {tag.name} (DB{tag.db_number}.DBW{tag.start_address})")
+        for tag in plc_cfg.tags:
+            print(f"     - {tag.name}: DB{tag.db}.{tag.type.upper()}{tag.address} "
+                  f"({tag.size}B, {tag.poll_ms}ms)")
+            if tag.description:
+                print(f"       {tag.description}")
+    
+    print("\n" + "="*60)
 
 
-def signal_handler(sig, frame):
-    """Обработчик сигнала остановки"""
-    print("\n⚠️ Interrupt received, stopping...")
-    collector.stop()
-    sys.exit(0)
+def show_status():
+    """Показать статус системы"""
+    logger = get_logger()
+    
+    print("\n" + "="*60)
+    print("📊 SYSTEM STATUS")
+    print("="*60)
+    
+    with get_session() as session:
+        plc_count = session.query(PLC).filter(PLC.is_active == True).count()
+        tag_count = session.query(Tag).filter(Tag.is_active == True).count()
+        data_count = session.query(TrendData).count()
+        
+        # Последняя запись
+        last_record = session.query(TrendData).order_by(
+            TrendData.timestamp.desc()
+        ).first()
+        
+        print(f"\n  PLCs (active):     {plc_count}")
+        print(f"  Tags (active):     {tag_count}")
+        print(f"  Trend records:     {data_count}")
+        
+        if last_record:
+            print(f"  Last record:       {last_record.timestamp}")
+            print(f"  Last value:        {last_record.value}")
+    
+    print("\n" + "="*60)
 
 
-def main():
-    args = sys.argv[1:]
+def run_collector(config):
+    """Запуск коллектора"""
+    logger = get_logger()
     
-    # Инициализация БД
-    if "--init-db" in args or "--demo" in args:
-        print("🗄️ Initializing database...")
-        init_db()
+    collector = CollectorService(
+        flush_interval_sec=config.flush_interval_sec
+    )
     
-    # Добавление демо-данных
-    if "--demo" in args:
-        add_demo_config()
+    def signal_handler(sig, frame):
+        logger.info("Interrupt received, stopping...")
+        collector.stop()
+        sys.exit(0)
     
-    # Если только инициализация - выходим
-    if "--init-db" in args and "--demo" not in args:
-        print("✅ Database initialized. Run without --init-db to start collector.")
-        return
-    
-    # Регистрируем обработчик Ctrl+C
     signal.signal(signal.SIGINT, signal_handler)
     
-    # Запускаем сервис
     collector.start()
     
     if not collector.running:
-        print("❌ Failed to start collector. Check configuration.")
+        logger.error("Failed to start collector. Run --init first.")
         return
     
     print("\n" + "="*50)
     print("📊 Collector is running. Press Ctrl+C to stop.")
     print("="*50 + "\n")
     
-    # Держим главный поток
     try:
         while collector.running:
-            signal.pause() if hasattr(signal, 'pause') else __import__('time').sleep(1)
+            import time
+            time.sleep(1)
     except KeyboardInterrupt:
         pass
     finally:
         collector.stop()
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Trends Collector - Сбор данных с ПЛК Siemens S7'
+    )
+    parser.add_argument('--init', action='store_true',
+                        help='Инициализация БД из config.yaml')
+    parser.add_argument('--test-connection', action='store_true',
+                        help='Проверка подключения к ПЛК')
+    parser.add_argument('--list-tags', action='store_true',
+                        help='Показать настроенные теги')
+    parser.add_argument('--status', action='store_true',
+                        help='Статус системы')
+    parser.add_argument('--config', default='config.yaml',
+                        help='Путь к файлу конфигурации')
+    
+    args = parser.parse_args()
+    
+    # Загружаем конфигурацию
+    try:
+        config = load_config(args.config)
+        setup_logging(config)
+    except FileNotFoundError:
+        print(f"❌ Config file not found: {args.config}")
+        print("   Create config.yaml or specify path with --config")
+        sys.exit(1)
+    
+    logger = get_logger()
+    
+    # Выполняем команду
+    if args.init:
+        init_from_config(config)
+    elif args.test_connection:
+        test_connection(config)
+    elif args.list_tags:
+        list_tags(config)
+    elif args.status:
+        show_status()
+    else:
+        run_collector(config)
 
 
 if __name__ == "__main__":
