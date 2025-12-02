@@ -46,6 +46,8 @@ class PLCResponse(BaseModel):
     name: str
     ip_address: str
     tcp_port: int
+    rack: int
+    slot: int
     is_active: bool
     tag_count: int
 
@@ -175,6 +177,8 @@ async def list_plcs():
                 name=plc.name,
                 ip_address=plc.ip_address,
                 tcp_port=plc.tcp_port,
+                rack=plc.rack,
+                slot=plc.slot,
                 is_active=plc.is_active,
                 tag_count=tag_count
             ))
@@ -201,6 +205,9 @@ async def create_plc(request: PLCCreateRequest):
         )
         session.add(plc)
         session.flush()
+        
+        # Автоматический перезапуск коллектора
+        collector_status["restart_requested"] = True
         
         return PLCCreateResponse(
             id=plc.id,
@@ -230,6 +237,9 @@ async def update_plc(plc_id: int, request: PLCCreateRequest):
         plc.rack = request.rack
         plc.slot = request.slot
         
+        # Автоматический перезапуск коллектора
+        collector_status["restart_requested"] = True
+        
         return {"message": f"PLC '{plc.name}' updated", "id": plc_id}
 
 
@@ -246,6 +256,9 @@ async def delete_plc(plc_id: int):
         
         # Деактивируем все теги этого ПЛК
         session.query(Tag).filter(Tag.plc_id == plc_id).update({"is_active": False})
+        
+        # Автоматический перезапуск коллектора
+        collector_status["restart_requested"] = True
         
         return {"message": f"PLC '{plc.name}' deleted", "id": plc_id}
 
@@ -370,6 +383,9 @@ async def create_tag(request: TagCreateRequest):
                 existing.poll_interval_ms = request.poll_interval_ms
                 existing.is_active = True
                 
+                # Автоматический перезапуск коллектора
+                collector_status["restart_requested"] = True
+                
                 return TagCreateResponse(
                     id=existing.id,
                     name=existing.name,
@@ -391,6 +407,9 @@ async def create_tag(request: TagCreateRequest):
         session.add(tag)
         session.flush()
         
+        # Автоматический перезапуск коллектора
+        collector_status["restart_requested"] = True
+        
         return TagCreateResponse(
             id=tag.id,
             name=tag.name,
@@ -408,6 +427,9 @@ async def delete_tag(tag_id: int):
             raise HTTPException(status_code=404, detail="Tag not found")
         
         tag.is_active = False
+        
+        # Автоматический перезапуск коллектора
+        collector_status["restart_requested"] = True
         
         return {"message": f"Tag '{tag.name}' deleted", "id": tag_id}
 
