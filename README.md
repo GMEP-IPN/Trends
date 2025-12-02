@@ -1,21 +1,19 @@
 # 📊 Trends Collector
 
-Система сбора и хранения трендов с ПЛК Siemens S7.
+Система сбора и визуализации трендов с ПЛК Siemens S7.
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
-![Tests](https://img.shields.io/badge/Tests-38%20passed-success.svg)
-![Coverage](https://img.shields.io/badge/Coverage-51%25-yellow.svg)
 
 ## 🎯 Возможности
 
 - 🔌 Подключение к ПЛК Siemens S7-300/400/1200/1500
-- 📈 Автоматический сбор данных по расписанию
+- 📈 Автоматический сбор данных в реальном времени
 - 💾 Хранение трендов в SQLite/PostgreSQL
-- 🔧 Настройка через YAML-конфиг (без кода)
+- 🌐 **Веб-интерфейс для настройки и визуализации**
+- 🎨 Красивые интерактивные графики
 - 🏠 Встроенный симулятор для тестирования
-- 📊 API для получения статистики
-- 🧪 Покрытие тестами
+- 🔄 Горячая перезагрузка конфигурации
 
 ## 📦 Установка
 
@@ -37,65 +35,72 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## 🚀 Быстрый старт
+
+```bash
+# Запуск (с веб-интерфейсом)
+python run.py
+
+# Запуск в режиме симуляции (для тестирования)
+python run.py --simulate
+```
+
+Откройте **http://127.0.0.1:8000** в браузере.
+
+При первом запуске появится мастер настройки:
+
+1. **Добавьте ПЛК** — укажите IP, порт, rack, slot
+2. **Настройте теги** — добавьте переменные для опроса
+3. **Смотрите тренды** — данные автоматически собираются и отображаются
+
+## 🖥️ Веб-интерфейс
+
+### Главный экран
+- 📊 Графики трендов в реальном времени
+- 📈 Статистика: мин, макс, среднее
+- ⚙️ Настройка ПЛК и тегов
+
+### Настройка ПЛК
+- ➕ Добавление нового ПЛК
+- ✏️ Редактирование параметров подключения
+- 🗑️ Удаление (с каскадным удалением тегов)
+- 🔄 Перезапуск коллектора после изменений
+
+### Настройка тегов
+- Имя и описание
+- DB-блок и адрес
+- Тип данных: `real`, `int`, `dint`, `bool`, `word`
+- Интервал опроса (мс)
+
 ## ⚙️ Конфигурация
 
-Настройки хранятся в `config.yaml`:
+Системные настройки в `config.yaml`:
 
 ```yaml
-# Настройки базы данных
+# База данных
 database:
   url: "sqlite:///trends.db"
 
 # Настройки сбора
 collector:
-  batch_size: 10
+  batch_size: 100
   flush_interval_sec: 5
+  reconnect_delay_sec: 5
 
-# Конфигурация ПЛК
-plcs:
-  - name: "MainPLC"
-    ip: "192.168.1.10"
-    port: 102
-    rack: 0
-    slot: 1              # S7-1200: 1, S7-300/400: 2
-    enabled: true
-    
-    tags:
-      - name: "Temperature"
-        db: 1
-        address: 0
-        type: "real"     # int, dint, real, bool, word
-        size: 4
-        poll_ms: 1000
+# API сервер
+api:
+  host: "127.0.0.1"
+  port: 8000
+
+# Логирование
+logging:
+  level: "INFO"
+  file: "logs/collector.log"
 ```
 
-## 🚀 Использование
+> 💡 **ПЛК и теги настраиваются через веб-интерфейс**, не в config.yaml!
 
-### Основные команды
-
-```bash
-# Инициализация БД из config.yaml
-python run.py --init
-
-# Проверка подключения к ПЛК
-python run.py --test-connection
-
-# Показать настроенные теги
-python run.py --list-tags
-
-# Статус системы
-python run.py --status
-
-# Запуск сбора данных (продакшен)
-python run.py
-
-# Запуск в режиме симуляции (для тестов)
-python run.py --simulate
-# или короткая форма
-python run.py -s
-```
-
-### Режим симуляции
+## 🏠 Режим симуляции
 
 Для тестирования без реального ПЛК:
 
@@ -103,63 +108,52 @@ python run.py -s
 python run.py --simulate
 ```
 
-Симулятор генерирует реалистичные данные:
-- 🌡️ Температура: колебания вокруг 22°C
-- 💧 Влажность: 40-50%
+Автоматически создаётся `SimPLC` с тегами:
+- 🌡️ **RoomTemperature** — температура (20-25°C)
+- 💧 **RoomHumidity** — влажность (40-50%)
+
+## 📊 REST API
+
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| GET | `/api/status` | Статус коллектора |
+| GET | `/api/plcs` | Список ПЛК |
+| POST | `/api/plcs` | Добавить ПЛК |
+| PUT | `/api/plcs/{id}` | Обновить ПЛК |
+| DELETE | `/api/plcs/{id}` | Удалить ПЛК |
+| GET | `/api/tags` | Список тегов |
+| POST | `/api/tags` | Добавить тег |
+| DELETE | `/api/tags/{id}` | Удалить тег |
+| GET | `/api/tags/{id}/trend` | Данные тренда |
+| GET | `/api/tags/{id}/statistics` | Статистика тега |
+| POST | `/api/collector/restart` | Перезапуск коллектора |
 
 ## 🏗️ Структура проекта
 
 ```
 trends/
 ├── app/
-│   ├── api/                 # REST API (будущее)
+│   ├── api/
+│   │   └── server.py           # FastAPI сервер
 │   ├── collectors/
 │   │   └── S7Comm/
-│   │       ├── plcsim.py    # Симулятор ПЛК
-│   │       └── siemens_s7.py # Клиент S7
+│   │       └── siemens_s7.py   # Клиент S7
 │   ├── config/
-│   │   ├── config_loader.py # Загрузчик YAML
-│   │   └── settings.py      # Настройки
+│   │   └── config_loader.py    # Загрузчик YAML
 │   ├── services/
 │   │   ├── collector_service.py  # Сервис сбора
 │   │   └── trend_service.py      # Работа с трендами
 │   └── storage/
-│       ├── database.py      # Подключение к БД
-│       └── models.py        # Модели SQLAlchemy
-├── tests/                   # Тесты
-├── logs/                    # Логи
-├── config.yaml              # Конфигурация
-├── requirements.txt         # Зависимости
-└── run.py                   # Точка входа
+│       ├── database.py         # Подключение к БД
+│       └── models.py           # Модели SQLAlchemy
+├── web/
+│   └── templates/
+│       └── index.html          # Веб-интерфейс
+├── tests/                      # Тесты
+├── config.yaml                 # Системные настройки
+├── requirements.txt            # Зависимости
+└── run.py                      # Точка входа
 ```
-
-## 📊 Модели данных
-
-### PLC
-| Поле | Тип | Описание |
-|------|-----|----------|
-| name | str | Уникальное имя ПЛК |
-| ip_address | str | IP адрес |
-| tcp_port | int | Порт (102 по умолчанию) |
-| rack | int | Rack (обычно 0) |
-| slot | int | Slot (1 или 2) |
-
-### Tag
-| Поле | Тип | Описание |
-|------|-----|----------|
-| name | str | Имя тега |
-| db_number | int | Номер DB блока |
-| start_address | int | Байтовый адрес |
-| data_type | str | Тип: int, dint, real, bool |
-| poll_interval_ms | int | Интервал опроса (мс) |
-
-### TrendData
-| Поле | Тип | Описание |
-|------|-----|----------|
-| tag_id | int | ID тега |
-| timestamp | datetime | Время записи |
-| value | float | Значение |
-| quality | int | Качество (192 = Good) |
 
 ## 🧪 Тестирование
 
@@ -170,43 +164,18 @@ pytest
 # С покрытием
 pytest --cov=app
 
-# Конкретный файл
-pytest tests/test_models.py
-
 # Verbose режим
 pytest -v
-```
-
-## 📝 API сервисов
-
-### TrendService
-
-```python
-from app.services import get_trend_data, get_latest_value, get_statistics
-
-# Получить данные за период
-data = get_trend_data(tag_id=1, start_time=..., end_time=...)
-
-# Последнее значение
-timestamp, value = get_latest_value(tag_id=1)
-
-# Статистика
-stats = get_statistics(tag_id=1)
-# {'min': 20.0, 'max': 25.0, 'avg': 22.5, 'count': 100}
 ```
 
 ## 🔧 Требования
 
 - Python 3.10+
-- snap7 (для связи с ПЛК)
-- SQLAlchemy 2.0+
-- PyYAML
+- python-snap7 (связь с ПЛК)
+- FastAPI + Uvicorn (веб-сервер)
+- SQLAlchemy 2.0+ (ORM)
+- Chart.js (графики)
 
 ## 📄 Лицензия
 
 MIT License
-
-## 👥 Авторы
-
-- Разработано с помощью Cursor AI
-

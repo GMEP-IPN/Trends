@@ -1,54 +1,41 @@
 """
 Загрузчик конфигурации из YAML файла.
+ПЛК и теги хранятся в БД и управляются через UI.
 """
 import os
 import yaml
 import logging
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Optional
 from dataclasses import dataclass
-
-
-@dataclass
-class TagConfig:
-    """Конфигурация тега"""
-    name: str
-    description: str
-    db: int
-    address: int
-    type: str
-    size: int
-    poll_ms: int
-
-
-@dataclass
-class PLCConfig:
-    """Конфигурация ПЛК"""
-    name: str
-    ip: str
-    port: int
-    rack: int
-    slot: int
-    enabled: bool
-    tags: List[TagConfig]
 
 
 @dataclass 
 class AppConfig:
-    """Главная конфигурация приложения"""
+    """Системная конфигурация приложения"""
+    # База данных
     database_url: str
+    
+    # Коллектор
     batch_size: int
     flush_interval_sec: float
     reconnect_delay_sec: int
+    
+    # Хранение
     retention_days: int
+    
+    # API
+    api_host: str
+    api_port: int
+    
+    # Логирование
     log_level: str
     log_file: str
-    plcs: List[PLCConfig]
 
 
 def load_config(config_path: str = "config.yaml") -> AppConfig:
     """
-    Загрузка конфигурации из YAML файла.
+    Загрузка системных настроек из YAML файла.
     
     Args:
         config_path: Путь к файлу конфигурации
@@ -64,41 +51,26 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
     with open(config_file, 'r', encoding='utf-8') as f:
         data = yaml.safe_load(f)
     
-    # Парсим ПЛК и теги
-    plcs = []
-    for plc_data in data.get('plcs', []):
-        tags = []
-        for tag_data in plc_data.get('tags', []):
-            tags.append(TagConfig(
-                name=tag_data['name'],
-                description=tag_data.get('description', ''),
-                db=tag_data['db'],
-                address=tag_data['address'],
-                type=tag_data['type'],
-                size=tag_data['size'],
-                poll_ms=tag_data.get('poll_ms', 1000)
-            ))
-        
-        plcs.append(PLCConfig(
-            name=plc_data['name'],
-            ip=plc_data['ip'],
-            port=plc_data.get('port', 102),
-            rack=plc_data.get('rack', 0),
-            slot=plc_data.get('slot', 1),
-            enabled=plc_data.get('enabled', True),
-            tags=tags
-        ))
-    
-    # Собираем конфиг
+    # Собираем конфиг только из системных настроек
     return AppConfig(
+        # База данных
         database_url=data.get('database', {}).get('url', 'sqlite:///trends.db'),
-        batch_size=data.get('collector', {}).get('batch_size', 10),
+        
+        # Коллектор
+        batch_size=data.get('collector', {}).get('batch_size', 100),
         flush_interval_sec=data.get('collector', {}).get('flush_interval_sec', 5),
         reconnect_delay_sec=data.get('collector', {}).get('reconnect_delay_sec', 5),
+        
+        # Хранение
         retention_days=data.get('storage', {}).get('retention_days', 30),
+        
+        # API
+        api_host=data.get('api', {}).get('host', '127.0.0.1'),
+        api_port=data.get('api', {}).get('port', 8000),
+        
+        # Логирование
         log_level=data.get('logging', {}).get('level', 'INFO'),
         log_file=data.get('logging', {}).get('file', 'logs/collector.log'),
-        plcs=plcs
     )
 
 
@@ -119,6 +91,9 @@ def setup_logging(config: AppConfig) -> logging.Logger:
     # Настраиваем логгер
     logger = logging.getLogger('trends')
     logger.setLevel(getattr(logging, config.log_level.upper()))
+    
+    # Очищаем старые хендлеры
+    logger.handlers.clear()
     
     # Форматтер
     formatter = logging.Formatter(
@@ -158,5 +133,3 @@ def get_logger() -> logging.Logger:
     if _logger is None:
         _logger = setup_logging(get_config())
     return _logger
-
-

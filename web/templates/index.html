@@ -493,6 +493,122 @@
             flex: 1;
         }
         
+        /* Welcome Screen */
+        .welcome-screen {
+            position: fixed;
+            inset: 0;
+            background: var(--bg-primary);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        
+        .welcome-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 3rem;
+            max-width: 560px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .welcome-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            margin: 0 auto 1.5rem;
+        }
+        
+        .welcome-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+        }
+        
+        .welcome-subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            line-height: 1.7;
+        }
+        
+        .welcome-steps {
+            text-align: left;
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .welcome-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 0.75rem 0;
+        }
+        
+        .welcome-step:not(:last-child) {
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .step-number {
+            width: 28px;
+            height: 28px;
+            background: var(--accent);
+            color: var(--bg-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.875rem;
+            flex-shrink: 0;
+        }
+        
+        .step-text {
+            flex: 1;
+        }
+        
+        .step-title {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        
+        .step-desc {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+        
+        .welcome-actions {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        .welcome-actions .btn {
+            flex: 1;
+            padding: 1rem 1.5rem;
+        }
+        
+        .btn-glow {
+            background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 4px 20px rgba(0, 212, 170, 0.3);
+        }
+        
+        .btn-glow:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(0, 212, 170, 0.4);
+        }
+        
         /* Toast */
         .toast {
             position: fixed;
@@ -654,6 +770,47 @@
     </style>
 </head>
 <body>
+    <!-- Welcome Screen (shown on first run) -->
+    <div class="welcome-screen" id="welcomeScreen" style="display: none;">
+        <div class="welcome-card">
+            <div class="welcome-icon">📊</div>
+            <h1 class="welcome-title">Добро пожаловать!</h1>
+            <p class="welcome-subtitle">
+                Trends Collector — система сбора и визуализации данных с ПЛК Siemens S7
+            </p>
+            
+            <div class="welcome-steps">
+                <div class="welcome-step">
+                    <div class="step-number">1</div>
+                    <div class="step-text">
+                        <div class="step-title">Добавьте ПЛК</div>
+                        <div class="step-desc">Укажите IP-адрес, порт, rack и slot вашего контроллера</div>
+                    </div>
+                </div>
+                <div class="welcome-step">
+                    <div class="step-number">2</div>
+                    <div class="step-text">
+                        <div class="step-title">Настройте теги</div>
+                        <div class="step-desc">Добавьте переменные для опроса: DB, адрес, тип данных</div>
+                    </div>
+                </div>
+                <div class="welcome-step">
+                    <div class="step-number">3</div>
+                    <div class="step-text">
+                        <div class="step-title">Смотрите тренды</div>
+                        <div class="step-desc">Данные автоматически собираются и отображаются на графиках</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="welcome-actions">
+                <button class="btn btn-glow" onclick="startSetup()">
+                    🚀 Начать настройку
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Connection Banner -->
     <div class="connection-banner" id="connectionBanner">
         ⚠️ <span id="bannerText">Нет подключения к ПЛК</span>
@@ -963,11 +1120,16 @@
         async function loadTags() {
             try {
                 const response = await fetch('/api/tags');
+                if (!response.ok) {
+                    console.error('Failed to load tags:', response.status);
+                    return;
+                }
                 const tags = await response.json();
                 
                 const tagList = document.getElementById('tagList');
+                if (!tagList) return;
                 
-                if (tags.length === 0) {
+                if (!tags || tags.length === 0) {
                     tagList.innerHTML = `
                         <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
                             <div style="font-size: 2rem; margin-bottom: 0.5rem;">📭</div>
@@ -1281,13 +1443,15 @@
                 }
                 
                 if (response.ok) {
+                    // Hide welcome screen if it was shown
+                    document.getElementById('welcomeScreen').style.display = 'none';
+                    
                     if (editId) {
-                        showToast(`ПЛК "${data.name}" обновлён. Перезапустите коллектор для применения!`, 'success');
-                        showRestartBanner();
+                        showToast(`ПЛК "${data.name}" обновлён`, 'success');
                     } else {
-                        showToast(`ПЛК "${data.name}" добавлен. Перезапустите коллектор!`, 'success');
-                        showRestartBanner();
+                        showToast(`ПЛК "${data.name}" добавлен`, 'success');
                     }
+                    showRestartBanner();
                     cancelPLCForm();
                     loadPLCs();
                     loadTags();
@@ -1336,7 +1500,7 @@
                 const response = await fetch(`/api/plcs/${id}`, { method: 'DELETE' });
                 
                 if (response.ok) {
-                    showToast(`ПЛК "${name}" удалён. Перезапустите коллектор!`, 'success');
+                    showToast(`ПЛК "${name}" удалён`, 'success');
                     showRestartBanner();
                     loadPLCs();
                     loadTags();
@@ -1397,7 +1561,7 @@
                     dot.classList.add('stopped');
                     text.textContent = 'Остановлен';
                     banner.classList.add('show');
-                    bannerText.textContent = 'Коллектор не запущен. Запустите: python run.py --web';
+                    bannerText.textContent = 'Коллектор остановлен';
                 } else {
                     dot.classList.add('stopped');
                     text.textContent = 'Неизвестно';
@@ -1414,14 +1578,45 @@
             }
         }
         
+        // Check if first run (no PLCs configured)
+        async function checkFirstRun() {
+            try {
+                const response = await fetch('/api/plcs');
+                const plcs = await response.json();
+                
+                if (plcs.length === 0) {
+                    document.getElementById('welcomeScreen').style.display = 'flex';
+                    return true;
+                }
+                return false;
+            } catch (error) {
+                console.error('Error checking PLCs:', error);
+                return false;
+            }
+        }
+        
+        function startSetup() {
+            document.getElementById('welcomeScreen').style.display = 'none';
+            showPLCForm();
+        }
+        
         // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             initChart();
-            loadTags();
+            
+            // Check if first run
+            const isFirstRun = await checkFirstRun();
+            
+            if (!isFirstRun) {
+                await loadTags();
+                await loadPLCs();
+            }
+            
             loadStatus();
             
-            // Периодически обновляем статус
+            // Периодически обновляем
             setInterval(loadStatus, 5000);
+            setInterval(loadTags, 5000);  // Обновляем теги для актуальных значений
         });
     </script>
 </body>

@@ -356,10 +356,25 @@ async def create_tag(request: TagCreateRequest):
         ).first()
         
         if existing:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Tag at DB{request.db_number}.{request.start_address} already exists"
-            )
+            if existing.is_active:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Tag at DB{request.db_number}.{request.start_address} already exists"
+                )
+            else:
+                # Реактивируем существующий тег
+                existing.name = request.name
+                existing.description = request.description
+                existing.data_type = request.data_type
+                existing.data_size = request.data_size
+                existing.poll_interval_ms = request.poll_interval_ms
+                existing.is_active = True
+                
+                return TagCreateResponse(
+                    id=existing.id,
+                    name=existing.name,
+                    message="Tag reactivated"
+                )
         
         # Создаём тег
         tag = Tag(

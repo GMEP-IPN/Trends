@@ -1,6 +1,7 @@
 # ===========================================
-# Конфигурация Trends Collector
+# Trends Collector - Системные настройки
 # ===========================================
+# ПЛК и теги настраиваются через веб-интерфейс!
 
 # Настройки базы данных
 database:
@@ -12,7 +13,7 @@ database:
 
 # Настройки сбора данных
 collector:
-  batch_size: 10           # Записей в одном пакете
+  batch_size: 100          # Записей в одном пакете
   flush_interval_sec: 5    # Интервал сброса буфера (сек)
   reconnect_delay_sec: 5   # Задержка переподключения к ПЛК
 
@@ -20,86 +21,14 @@ collector:
 storage:
   retention_days: 30       # Сколько дней хранить данные
 
-# ===========================================
-# Конфигурация ПЛК
-# ===========================================
-plcs:
-  # Пример для реального ПЛК Siemens S7-1200/1500
-  - name: "MainPLC"
-    ip: "10.11.33.21"       # IP адрес ПЛК
-    port: 102               # Порт (102 - стандартный для S7)
-    rack: 0                 # Rack (обычно 0)
-    slot: 1                 # Slot (S7-1200: 1, S7-300/400: 2)
-    enabled: true           # ✅ Включён
-    
-    # Теги для сбора
-    tags:
-      # Формат: DB[номер].DB[тип][адрес]
-      # Типы: X=bit, B=byte, W=word(int), D=dword(dint), R=real
-      
-      - name: "Temperature"
-        description: "Температура процесса"
-        db: 1                # Номер DB блока
-        address: 0           # Байтовый адрес (DBW0)
-        type: "real"         # int, dint, real, bool, word
-        size: 4              # Размер в байтах (real=4, int=2, bool=1)
-        poll_ms: 1000        # Интервал опроса (мс)
-        
-      - name: "Pressure"
-        description: "Давление в системе"
-        db: 1
-        address: 4           # DBW4 (после real идёт +4 байта)
-        type: "real"
-        size: 4
-        poll_ms: 1000
-        
-      - name: "MotorRunning"
-        description: "Двигатель работает"
-        db: 1
-        address: 8           # DBX8.0
-        type: "bool"
-        size: 1
-        poll_ms: 500
-        
-      - name: "Counter"
-        description: "Счётчик изделий"
-        db: 1
-        address: 10          # DBW10
-        type: "int"
-        size: 2
-        poll_ms: 1000
+# API сервер
+api:
+  host: "127.0.0.1"        # Адрес сервера (0.0.0.0 для доступа извне)
+  port: 8000               # Порт веб-интерфейса
 
-  # Симулятор комнаты для тестирования
-  - name: "SimPLC"
-    ip: "127.0.0.1"
-    port: 2000
-    rack: 0
-    slot: 1
-    enabled: false          # Отключён
-    
-    tags:
-      - name: "RoomTemperature"
-        description: "Температура в комнате"
-        db: 1
-        address: 0
-        type: "real"
-        size: 4
-        poll_ms: 1000
-        
-      - name: "RoomHumidity"
-        description: "Влажность в комнате"
-        db: 1
-        address: 4
-        type: "real"
-        size: 4
-        poll_ms: 1000
-
-# ===========================================
 # Логирование
-# ===========================================
 logging:
   level: "INFO"            # DEBUG, INFO, WARNING, ERROR
   file: "logs/collector.log"
   max_size_mb: 10
   backup_count: 5
-
