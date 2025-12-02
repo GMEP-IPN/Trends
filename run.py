@@ -59,11 +59,12 @@ def init_from_config(config):
                 session.add(plc)
                 session.flush()
             
-            # Добавляем/обновляем теги
+            # Добавляем/обновляем теги (проверка по адресу, т.к. он уникален)
             for tag_cfg in plc_cfg.tags:
                 existing_tag = session.query(Tag).filter(
                     Tag.plc_id == plc.id,
-                    Tag.name == tag_cfg.name
+                    Tag.db_number == tag_cfg.db,
+                    Tag.start_address == tag_cfg.address
                 ).first()
                 
                 if existing_tag:

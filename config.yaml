@@ -30,7 +30,7 @@ plcs:
     port: 102               # Порт (102 - стандартный для S7)
     rack: 0                 # Rack (обычно 0)
     slot: 1                 # Slot (S7-1200: 1, S7-300/400: 2)
-    enabled: true
+    enabled: false          # Отключен для тестов
     
     # Теги для сбора
     tags:
@@ -69,13 +69,13 @@ plcs:
         size: 2
         poll_ms: 1000
 
-  # Симулятор для тестирования (отключен по умолчанию)
+  # Симулятор для тестирования
   - name: "SimPLC"
     ip: "127.0.0.1"
     port: 2000
     rack: 0
     slot: 1
-    enabled: false          # Включить для тестов
+    enabled: true           # ✅ Включён для тестов
     
     tags:
       - name: "TestCounter"
