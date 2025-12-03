@@ -1240,13 +1240,13 @@
             await loadTrendData();
             await loadStatistics();
             
-            // Start auto-update
+            // Start auto-update (only current values and stats, not historical trend data)
             if (updateInterval) clearInterval(updateInterval);
             updateInterval = setInterval(() => {
-                loadTrendData();
-                loadStatistics();
-                loadTags();
-            }, 1000);
+                loadStatistics();  // Update statistics
+                loadTags();        // Update current values
+                // Trend data only loads when tag or period changes
+            }, 5000);
         }
         
         // Load trend data
@@ -1299,13 +1299,13 @@
                 loadTrendData();
                 loadStatistics();
 
-                // Start auto-update for new period
+                // Start auto-update for new period (only current values, not historical data)
                 if (updateInterval) clearInterval(updateInterval);
                 updateInterval = setInterval(() => {
-                    loadTrendData();
-                    loadStatistics();
-                    loadTags();
-                }, 1000);
+                    loadStatistics();  // Update stats
+                    loadTags();        // Update current values
+                    // Don't reload trend data every second - only when period changes
+                }, 5000);
             });
         });
         
@@ -1695,8 +1695,8 @@
             loadStatus();
             
             // Периодически обновляем
-            setInterval(loadStatus, 1000);
-            setInterval(loadTags, 1000);  // Обновляем теги для актуальных значений
+            setInterval(loadStatus, 5000);
+            setInterval(loadTags, 5000);  // Обновляем теги для актуальных значений
         });
     </script>
 </body>
