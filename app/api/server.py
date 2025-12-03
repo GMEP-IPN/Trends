@@ -88,13 +88,30 @@ class SystemStatusResponse(BaseModel):
     connection_status: str = "unknown"  # connected, disconnected, error
 
 
+# Размеры типов данных S7 (в байтах)
+DATA_TYPE_SIZES = {
+    'bool': 1,
+    'int': 2,
+    'word': 2,
+    'dint': 4,
+    'dword': 4,
+    'real': 4,
+    'string': 256,  # По умолчанию для строк
+}
+
+
+def get_data_size(data_type: str) -> int:
+    """Получить размер данных по типу"""
+    return DATA_TYPE_SIZES.get(data_type.lower(), 4)
+
+
 class TagCreateRequest(BaseModel):
     name: str
     description: Optional[str] = ""
     db_number: int
     start_address: int
     data_type: str  # int, dint, real, bool, word
-    data_size: int
+    data_size: Optional[int] = None  # Опционально - автоопределение по типу
     poll_interval_ms: int = 1000
     plc_id: Optional[int] = None  # Если не указан, берём первый активный ПЛК
     
@@ -131,13 +148,6 @@ class TagCreateRequest(BaseModel):
             raise ValueError(f'Invalid data type. Must be one of: {", ".join(valid_types)}')
         return v
     
-    @field_validator('data_size')
-    @classmethod
-    def validate_data_size(cls, v: int) -> int:
-        if not 1 <= v <= 256:
-            raise ValueError('Data size must be between 1 and 256 bytes')
-        return v
-    
     @field_validator('poll_interval_ms')
     @classmethod
     def validate_poll_interval(cls, v: int) -> int:
@@ -157,7 +167,7 @@ class PLCCreateRequest(BaseModel):
     ip_address: str
     tcp_port: int = 102
     rack: int = 0
-    slot: int = 1
+    slot: int = 2
     
     @field_validator('name')
     @classmethod
@@ -510,7 +520,7 @@ async def create_tag(request: TagCreateRequest):
                 existing.name = request.name
                 existing.description = request.description
                 existing.data_type = request.data_type
-                existing.data_size = request.data_size
+                existing.data_size = get_data_size(request.data_type)  # Автоопределение размера
                 existing.poll_interval_ms = request.poll_interval_ms
                 existing.is_active = True
                 
@@ -523,7 +533,7 @@ async def create_tag(request: TagCreateRequest):
                     message="Tag reactivated"
                 )
         
-        # Создаём тег
+        # Создаём тег (размер автоматически по типу)
         tag = Tag(
             plc_id=plc.id,
             name=request.name,
@@ -531,7 +541,7 @@ async def create_tag(request: TagCreateRequest):
             db_number=request.db_number,
             start_address=request.start_address,
             data_type=request.data_type,
-            data_size=request.data_size,
+            data_size=get_data_size(request.data_type),  # Автоопределение размера
             poll_interval_ms=request.poll_interval_ms,
             is_active=True
         )

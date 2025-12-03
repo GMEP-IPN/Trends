@@ -94,20 +94,14 @@ class PLC:
             # Подключаемся с указанными параметрами
             self.client.connect(self.plc_ip, self.rack, self.slot)
 
-            # Проверяем реальное соединение тестовым чтением
-            try:
-                # Пробуем прочитать из DB16 (который используется в теге)
-                self.client.db_read(16, 0, 4)
+            # Проверяем статус соединения через API snap7
+            if self.client.get_connected():
                 self.connected = True
                 logger.info(f"✅ Connected to PLC at {self.plc_ip}:{self.tcp_port}")
                 return True
-            except (Snap7Exception, RuntimeError) as read_err:
+            else:
                 self.connected = False
-                logger.warning(f"⚠️ Connection test failed to {self.plc_ip}:{self.tcp_port}: {read_err}")
-                try:
-                    self.client.disconnect()
-                except Exception:
-                    pass
+                logger.warning(f"⚠️ Connection status check failed for {self.plc_ip}:{self.tcp_port}")
                 return False
                 
         except (Snap7Exception, RuntimeError) as e:

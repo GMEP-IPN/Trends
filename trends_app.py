@@ -17,12 +17,18 @@ if getattr(sys, 'frozen', False):
     # Запущено как .exe - данные в _MEIPASS
     BASE_DIR = Path(sys._MEIPASS)
     APP_DIR = Path(sys.executable).parent
+    # Устанавливаем переменную окружения для settings.py
+    os.environ["FROZEN_APP_DIR"] = str(APP_DIR)
 else:
     BASE_DIR = Path(__file__).parent
     APP_DIR = BASE_DIR
 
 sys.path.insert(0, str(BASE_DIR))
 os.chdir(APP_DIR)  # Рабочая директория - где лежит .exe
+
+# Создаём директорию DB если её нет
+DB_DIR = APP_DIR / "DB"
+DB_DIR.mkdir(exist_ok=True)
 
 # Настройка логирования в файл (рядом с .exe)
 LOG_FILE = APP_DIR / "trends_app.log"
