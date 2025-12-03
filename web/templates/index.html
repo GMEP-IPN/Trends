@@ -203,6 +203,27 @@
             transform: scale(1.1);
         }
         
+        .mini-btn {
+            width: 24px;
+            height: 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        
+        .mini-btn:hover {
+            background: var(--bg-hover);
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+        
         /* PLC Selector */
         .plc-selector {
             display: flex;
@@ -305,11 +326,14 @@
         .tag-item {
             background: var(--bg-card);
             border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1rem;
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
             cursor: pointer;
             transition: all 0.2s;
             position: relative;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
         }
         
         .tag-item:hover {
@@ -319,51 +343,71 @@
         
         .tag-item.active {
             border-color: var(--accent);
-            box-shadow: 0 0 20px var(--accent-dim);
+            box-shadow: 0 0 10px var(--accent-dim);
+        }
+        
+        .tag-info {
+            flex: 1;
+            min-width: 0;
+            cursor: pointer;
         }
         
         .tag-name {
             font-weight: 500;
-            margin-bottom: 0.25rem;
+            font-size: 0.875rem;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.4rem;
         }
         
         .tag-color-dot {
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
+            flex-shrink: 0;
+        }
+        
+        .tag-checkbox {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: var(--accent);
             flex-shrink: 0;
         }
         
         .tag-value {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 1.5rem;
+            font-size: 1rem;
             font-weight: 600;
             color: var(--accent);
+            text-align: right;
+            min-width: 70px;
+            margin-right: 1.5rem;
         }
         
         .tag-meta {
-            font-size: 0.75rem;
+            font-size: 0.65rem;
             color: var(--text-muted);
-            margin-top: 0.5rem;
         }
         
         .tag-delete {
             position: absolute;
-            top: 0.5rem;
+            top: 50%;
             right: 0.5rem;
-            width: 24px;
-            height: 24px;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
             background: var(--danger);
             border: none;
-            border-radius: 6px;
+            border-radius: 4px;
             color: white;
             cursor: pointer;
             opacity: 0;
             transition: all 0.2s;
-            font-size: 0.875rem;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
         .tag-item:hover .tag-delete {
@@ -1264,11 +1308,12 @@
     <script>
         // State
         let selectedTagId = null;
-        let selectedPlcId = null;  // null = все ПЛК
+        let selectedPlcId = null;  // null = all PLCs
         let selectedMinutes = 60;
         let chart = null;
         let updateInterval = null;
-        let tagsData = [];  // Хранение данных тегов для статистики
+        let tagsData = [];  // Store tag data for statistics
+        let visibleTagIds = new Set();  // Tags visible on chart
         
         // Цветовая палитра для линий графика
         const chartColors = [
@@ -1496,17 +1541,21 @@
                 
                 tagList.innerHTML = tags.map((tag, index) => {
                     const color = chartColors[index % chartColors.length];
+                    const isVisible = visibleTagIds.has(tag.id);
                     return `
                     <div class="tag-item ${selectedTagId === tag.id ? 'active' : ''}" 
-                         data-id="${tag.id}" 
-                         onclick="selectTag(${tag.id}, '${tag.name}')">
-                        <button class="tag-delete" onclick="deleteTag(event, ${tag.id}, '${tag.name}')" title="Удалить">×</button>
-                        <div class="tag-name">
-                            <span class="tag-color-dot" style="background: ${color.border}"></span>
-                            ${tag.name}
+                         data-id="${tag.id}">
+                        <button class="tag-delete" onclick="deleteTag(event, ${tag.id}, '${tag.name}')" title="Delete">×</button>
+                        <input type="checkbox" class="tag-checkbox" 
+                               ${isVisible ? 'checked' : ''} 
+                               onclick="event.stopPropagation(); toggleTagVisibility(${tag.id})"
+                               title="Show on chart">
+                        <span class="tag-color-dot" style="background: ${color.border}; opacity: ${isVisible ? 1 : 0.3}"></span>
+                        <div class="tag-info" onclick="selectTag(${tag.id}, '${tag.name}')">
+                            <div class="tag-name">${tag.name}</div>
+                            <div class="tag-meta">DB${tag.db_number}.${tag.data_type.toUpperCase()}${tag.start_address}</div>
                         </div>
-                        <div class="tag-value">${tag.latest_value !== null ? tag.latest_value.toFixed(2) : '--'}</div>
-                        <div class="tag-meta">DB${tag.db_number}.${tag.data_type.toUpperCase()}${tag.start_address}</div>
+                        <div class="tag-value" style="opacity: ${isVisible ? 1 : 0.5}">${tag.latest_value !== null ? tag.latest_value.toFixed(2) : '--'}</div>
                     </div>
                 `}).join('');
                 
@@ -1515,9 +1564,54 @@
                     selectedTagId = tags[0].id;
                     document.querySelector('.tag-item')?.classList.add('active');
                 }
+                
+                // Initialize visible tags (all visible by default for new tags)
+                tags.forEach(tag => {
+                    if (!visibleTagIds.has(tag.id) && visibleTagIds.size === 0) {
+                        // First load - make all visible
+                        visibleTagIds.add(tag.id);
+                    }
+                });
+                // If still empty, add all
+                if (visibleTagIds.size === 0) {
+                    tags.forEach(tag => visibleTagIds.add(tag.id));
+                }
             } catch (error) {
                 console.error('Error loading tags:', error);
             }
+        }
+        
+        // Toggle tag visibility on chart
+        async function toggleTagVisibility(tagId) {
+            if (visibleTagIds.has(tagId)) {
+                visibleTagIds.delete(tagId);
+            } else {
+                visibleTagIds.add(tagId);
+            }
+            
+            // Reload tags to update UI
+            await loadTags();
+            // Reload chart with new selection
+            await loadTrendData();
+        }
+        
+        // Select all tags for display
+        async function selectAllTags() {
+            const url = selectedPlcId ? `/api/tags?plc_id=${selectedPlcId}` : '/api/tags';
+            const response = await fetch(url);
+            if (response.ok) {
+                const tags = await response.json();
+                tags.forEach(tag => visibleTagIds.add(tag.id));
+                await loadTags();
+                await loadTrendData();
+            }
+        }
+        
+        // Deselect all tags
+        async function deselectAllTags() {
+            visibleTagIds.clear();
+            await loadTags();
+            await loadTrendData();
         }
         
         // Select tag (для подсветки в sidebar, статистика по выбранному)
@@ -1547,7 +1641,7 @@
             }, 1000);
         }
         
-        // Load trend data for ALL tags
+        // Load trend data for VISIBLE tags only
         async function loadTrendData() {
             try {
                 const url = selectedPlcId 
@@ -1558,13 +1652,19 @@
                 if (!response.ok) return;
                 
                 const trends = await response.json();
-                tagsData = trends;  // Сохраняем для статистики
+                tagsData = trends;  // Store for statistics
                 
-                // Создаём датасеты для каждого тега
-                chart.data.datasets = trends.map((trend, index) => {
-                    const color = chartColors[index % chartColors.length];
+                // Filter to only visible tags
+                const visibleTrends = trends.filter(t => visibleTagIds.has(t.tag_id));
+                
+                // Create datasets for each visible tag
+                chart.data.datasets = visibleTrends.map((trend) => {
+                    // Find original index for consistent color
+                    const originalIndex = trends.findIndex(t => t.tag_id === trend.tag_id);
+                    const color = chartColors[originalIndex % chartColors.length];
                     return {
                         label: trend.tag_name,
+                        tagId: trend.tag_id,
                         data: trend.data.map(point => ({
                             x: new Date(point.timestamp),
                             y: point.value
@@ -1573,32 +1673,34 @@
                         backgroundColor: color.bg,
                         borderWidth: 2,
                         fill: false,
-                        tension: 0.4,
+                        tension: 0,
                         pointRadius: 0,
                         pointHoverRadius: 6,
                         pointHoverBackgroundColor: color.border,
                         pointHoverBorderColor: '#fff',
-                        pointHoverBorderWidth: 2
+                        pointHoverBorderWidth: 2,
+                        spanGaps: false
                     };
                 });
                 
                 chart.update('none');
                 
                 // Update title
+                const visibleCount = visibleTrends.length;
+                const totalCount = trends.length;
                 document.getElementById('chartTitle').textContent = 
-                    trends.length > 0 ? `Trends (${trends.length} tags)` : 'No data';
+                    totalCount > 0 ? `Trends (${visibleCount}/${totalCount} tags)` : 'No data';
                     
             } catch (error) {
                 console.error('Error loading trend data:', error);
             }
         }
 
-        // Update live trend data (add new points to all datasets)
+        // Update live trend data (add new points to visible datasets)
         async function updateLiveTrendData() {
             if (!chart || chart.data.datasets.length === 0) return;
 
             try {
-                // Получаем последние значения для всех тегов
                 const url = selectedPlcId ? `/api/tags?plc_id=${selectedPlcId}` : '/api/tags';
                 const response = await fetch(url);
                 if (!response.ok) return;
@@ -1608,9 +1710,9 @@
                 const cutoffTime = new Date();
                 cutoffTime.setMinutes(cutoffTime.getMinutes() - selectedMinutes);
                 
-                // Обновляем каждый датасет
-                chart.data.datasets.forEach((dataset, index) => {
-                    const tag = tags.find(t => t.name === dataset.label);
+                // Update each visible dataset
+                chart.data.datasets.forEach((dataset) => {
+                    const tag = tags.find(t => t.id === dataset.tagId || t.name === dataset.label);
                     if (tag && tag.latest_value !== null && tag.latest_time) {
                         const newPoint = {
                             x: new Date(tag.latest_time),
@@ -1622,7 +1724,6 @@
                             const lastPoint = currentData[currentData.length - 1];
                             if (newPoint.x > lastPoint.x) {
                                 currentData.push(newPoint);
-                                // Удаляем старые точки
                                 dataset.data = currentData.filter(point => point.x >= cutoffTime);
                             }
                         }
@@ -1748,6 +1849,8 @@
                     const result = await response.json();
                     showToast(`Tag "${result.name}" added`, 'success');
                     closeModal();
+                    // Make new tag visible by default
+                    visibleTagIds.add(result.id);
                     await loadTags();
                     await initTrends();
                 } else {

@@ -69,17 +69,32 @@ class PLCConnection:
                 type_data=tag.data_type
             )
             
+            # Validate value
+            float_value = float(value)
+            
+            # Check for NaN or Infinity
+            import math
+            if math.isnan(float_value) or math.isinf(float_value):
+                logger.warning(f"⚠️ Invalid value (NaN/Inf) for tag {tag.name}, skipping")
+                return None
+            
+            # Check for extreme values (likely garbage data)
+            # REAL type has range ~±3.4e38, but practical values rarely exceed ±1e6
+            if abs(float_value) > 1e9:
+                logger.warning(f"⚠️ Extreme value {float_value} for tag {tag.name}, skipping")
+                return None
+            
             self.last_poll[tag.id] = datetime.now()
             
             return TagValue(
                 tag_id=tag.id,
-                value=float(value),
+                value=float_value,
                 timestamp=datetime.now(),
                 quality=192  # Good (OPC standard)
             )
         except PLCReadError as e:
             logger.warning(f"⚠️ Read error for tag {tag.name}: {e}")
-            return None  # Не возвращаем фейковое значение
+            return None
         except PLCConnectionError as e:
             logger.error(f"❌ Connection error for tag {tag.name}: {e}")
             return None
