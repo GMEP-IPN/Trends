@@ -85,11 +85,13 @@ class PLC:
             
         try:
             logger.info(f"🔌 Connecting to {self.plc_ip}:{self.tcp_port}...")
-            self.client.connect(self.plc_ip, self.rack, self.slot, tcp_port=self.tcp_port)
-            
+            # Подключаемся с указанными параметрами
+            self.client.connect(self.plc_ip, self.rack, self.slot)
+
             # Проверяем реальное соединение тестовым чтением
             try:
-                self.client.db_read(1, 0, 1)
+                # Пробуем прочитать из DB16 (который используется в теге)
+                self.client.db_read(16, 0, 4)
                 self.connected = True
                 logger.info(f"✅ Connected to PLC at {self.plc_ip}:{self.tcp_port}")
                 return True
@@ -193,14 +195,17 @@ class PLC:
 
         except (Snap7Exception, RuntimeError) as e:
             logger.warning(f"⚠️ Read failed (DB{db_number}.{start}): {e}")
-            self.connected = False
-            
+            # Не сбрасываем статус при первой ошибке - может быть временной
+            # self.connected = False
+
             # Вторая попытка после переподключения
             try:
                 self.ensure_connection(timeout_attempts=3)
                 raw = self.client.db_read(db_number, start, size)
                 return self.parsers[type_data](raw)
             except (PLCConnectionError, Snap7Exception, RuntimeError) as retry_err:
+                # Сбрасываем статус только если вторая попытка тоже провалилась
+                self.connected = False
                 raise PLCReadError(f"Failed to read DB{db_number}.{start} after retry: {retry_err}")
         
         except Exception as e:

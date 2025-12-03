@@ -227,6 +227,8 @@ class CollectorManager:
         with self._lock:
             if self.collector and self.collector.running:
                 for conn in self.collector.connections.values():
+                    # Логируем для отладки
+                    logger.debug(f"Connection status for {conn.name}: connected={conn.client.connected}")
                     collector_status.connected = conn.client.connected
                     break
             else:
