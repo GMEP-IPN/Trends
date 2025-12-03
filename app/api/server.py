@@ -415,6 +415,42 @@ async def get_tag_trend(
     ]
 
 
+class TagTrendResponse(BaseModel):
+    tag_id: int
+    tag_name: str
+    data: List[TrendPointResponse]
+
+
+@app.get("/api/trends", response_model=List[TagTrendResponse])
+async def get_all_trends(
+    plc_id: Optional[int] = None,
+    minutes: int = Query(default=60, ge=1, le=1440, description="Период в минутах")
+):
+    """Данные трендов для всех тегов (для отображения на одном графике)"""
+    end_time = datetime.now()
+    start_time = end_time - timedelta(minutes=minutes)
+    
+    with get_session() as session:
+        query = session.query(Tag).filter(Tag.is_active == True)
+        if plc_id:
+            query = query.filter(Tag.plc_id == plc_id)
+        tags = query.all()
+        
+        result = []
+        for tag in tags:
+            data = get_trend_data(tag.id, start_time, end_time, limit=1000)
+            result.append(TagTrendResponse(
+                tag_id=tag.id,
+                tag_name=tag.name,
+                data=[
+                    TrendPointResponse(timestamp=ts.isoformat(), value=round(val, 2))
+                    for ts, val in data
+                ]
+            ))
+        
+        return result
+
+
 @app.get("/api/tags/{tag_id}/statistics", response_model=StatisticsResponse)
 async def get_tag_statistics(
     tag_id: int,

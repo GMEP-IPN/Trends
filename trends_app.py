@@ -17,15 +17,12 @@ if getattr(sys, 'frozen', False):
     # Запущено как .exe - данные в _MEIPASS
     BASE_DIR = Path(sys._MEIPASS)
     APP_DIR = Path(sys.executable).parent
-    # Устанавливаем переменную окружения для правильного пути к БД
-    os.environ["FROZEN_APP_DIR"] = str(APP_DIR)
-    # Для exe файла рабочая директория должна быть рядом с exe
-    os.chdir(APP_DIR)
 else:
     BASE_DIR = Path(__file__).parent
     APP_DIR = BASE_DIR
 
 sys.path.insert(0, str(BASE_DIR))
+os.chdir(APP_DIR)  # Рабочая директория - где лежит .exe
 
 # Настройка логирования в файл (рядом с .exe)
 LOG_FILE = APP_DIR / "trends_app.log"
@@ -102,56 +99,15 @@ class TrendsApp:
         """Запуск веб-сервера и коллектора"""
         try:
             app_logger.info("start_server() called")
-
-            # Проверяем текущую рабочую директорию
-            current_dir = os.getcwd()
-            app_logger.info(f"Current working directory: {current_dir}")
-
+            
             # Загрузка конфигурации
-            if getattr(sys, 'frozen', False):
-                # Для exe файла config всегда в APP_DIR (папка с exe)
-                config_path = APP_DIR / 'config.yaml'
-                app_logger.info(f"EXE mode - APP_DIR: {APP_DIR}")
-                app_logger.info(f"EXE mode - config path: {config_path}")
-                app_logger.info(f"EXE mode - config exists: {config_path.exists()}")
-                app_logger.info(f"EXE mode - APP_DIR exists: {APP_DIR.exists()}")
-
-                # Проверяем, можем ли мы читать файл
-                try:
-                    app_logger.info(f"EXE mode - config permissions: {oct(config_path.stat().st_mode)}")
-                    app_logger.info(f"EXE mode - can read: {os.access(config_path, os.R_OK)}")
-                except Exception as e:
-                    app_logger.error(f"EXE mode - error checking permissions: {e}")
-
-                # Если не можем прочитать из APP_DIR, пробуем BASE_DIR
-                if not config_path.exists():
-                    config_path = BASE_DIR / 'config.yaml'
-                    app_logger.info(f"EXE mode - fallback to BASE_DIR: {config_path}")
-            else:
-                # Для разработки используем обычную логику
-                config_path = BASE_DIR / 'config.yaml'
-                app_logger.info(f"DEV mode - using BASE_DIR config: {config_path}")
-
-            app_logger.info(f"Final config path: {config_path}")
-            app_logger.info(f"Final config exists: {config_path.exists()}")
-
-            try:
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    app_logger.info(f"Config content length: {len(content)} chars")
-                    # Ищем строку с database url
-                    for line in content.split('\n'):
-                        if 'url:' in line and 'sqlite' in line:
-                            app_logger.info(f"Database URL in config: {line.strip()}")
-                            break
-            except Exception as e:
-                app_logger.error(f"Error reading config: {e}")
-                raise  # Для exe файла это критическая ошибка
+            config_path = BASE_DIR / 'config.yaml'
+            app_logger.info(f"Config path: {config_path}")
+            app_logger.info(f"Config exists: {config_path.exists()}")
             
             self.config = load_config(str(config_path))
             app_logger.info(f"Config loaded: host={self.config.api_host}, port={self.config.api_port}")
-            app_logger.info(f"Database URL: {self.config.database_url}")
-
+            
             self.logger = setup_logging(self.config)
             self.server_url = f"http://{self.config.api_host}:{self.config.api_port}"
             
@@ -159,44 +115,8 @@ class TrendsApp:
             
             # Инициализация БД
             app_logger.info("Initializing database...")
-            app_logger.info(f"Current working directory: {os.getcwd()}")
-
-            # Проверяем, существует ли папка DB
-            db_dir = APP_DIR / 'DB'
-            app_logger.info(f"DB directory: {db_dir}")
-            app_logger.info(f"DB directory exists: {db_dir.exists()}")
-
-            # Создаём папку DB если её нет
-            if not db_dir.exists():
-                db_dir.mkdir(parents=True)
-                app_logger.info("Created DB directory")
-
             init_db()
             app_logger.info("Database initialized")
-
-            # Принудительно создаём файл БД выполнив простой запрос
-            from app.storage.database import get_session
-            try:
-                with get_session() as session:
-                    # Выполняем простой запрос чтобы создать файл БД
-                    result = session.execute("SELECT 1")
-                    app_logger.info("Database file created/verified with test query")
-            except Exception as e:
-                app_logger.error(f"Error creating database file: {e}")
-
-            # Проверяем, создалась ли БД
-            db_path = APP_DIR / 'DB' / 'trends.db'
-            app_logger.info(f"Expected DB path: {db_path}")
-            app_logger.info(f"DB file exists: {db_path.exists()}")
-
-            if db_path.exists():
-                db_size = db_path.stat().st_size
-                app_logger.info(f"DB file size: {db_size} bytes")
-            else:
-                # Ищем БД в других местах
-                import glob
-                db_files = glob.glob("**/*.db", recursive=True)
-                app_logger.info(f"Found DB files: {db_files}")
             
             # Запуск веб-сервера
             app_logger.info("Starting web server...")

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,6 +12,8 @@
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
     
     <style>
         :root {
@@ -29,6 +31,21 @@
             --success: #22c55e;
             --warning: #f59e0b;
             --danger: #ef4444;
+        }
+        
+        /* Light Theme */
+        [data-theme="light"] {
+            --bg-primary: #f8fafc;
+            --bg-secondary: #ffffff;
+            --bg-card: #ffffff;
+            --bg-hover: #f1f5f9;
+            --accent: #0891b2;
+            --accent-dim: #0891b233;
+            --accent-secondary: #7c3aed;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --text-muted: #94a3b8;
+            --border: #e2e8f0;
         }
         
         * {
@@ -308,6 +325,16 @@
         .tag-name {
             font-weight: 500;
             margin-bottom: 0.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .tag-color-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
         }
         
         .tag-value {
@@ -728,6 +755,141 @@
         .toast.success { border-color: var(--success); }
         .toast.error { border-color: var(--danger); }
         
+        /* Theme Toggle */
+        .theme-toggle {
+            width: 40px;
+            height: 40px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            transition: all 0.2s;
+        }
+        
+        .theme-toggle:hover {
+            background: var(--bg-hover);
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+        
+        /* Chart Controls */
+        .chart-controls {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        
+        .chart-btn {
+            width: 36px;
+            height: 36px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+        
+        .chart-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border-color: var(--accent);
+        }
+        
+        .chart-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: var(--bg-primary);
+        }
+        
+        /* Fullscreen Mode */
+        .chart-container.fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1000;
+            border-radius: 0;
+            margin: 0;
+            padding: 2rem;
+        }
+        
+        .chart-container.fullscreen .chart-wrapper {
+            height: calc(100vh - 120px);
+        }
+        
+        /* Stats Table for Multiple Tags */
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+        
+        .stats-table th {
+            text-align: left;
+            padding: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .stats-table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .stats-table tr:hover {
+            background: var(--bg-hover);
+        }
+        
+        .stats-table .tag-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 0.5rem;
+            vertical-align: middle;
+        }
+        
+        .stats-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stats-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .stats-card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        /* Zoom hint */
+        .zoom-hint {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-left: 1rem;
+        }
+        
         /* PLC List in Modal */
         .plc-list {
             max-height: 200px;
@@ -850,38 +1012,38 @@
     <div class="welcome-screen" id="welcomeScreen" style="display: none;">
         <div class="welcome-card">
             <div class="welcome-icon">📊</div>
-            <h1 class="welcome-title">Добро пожаловать!</h1>
+            <h1 class="welcome-title">Welcome!</h1>
             <p class="welcome-subtitle">
-                Trends — система сбора и визуализации данных с ПЛК Siemens S7
+                Trends — data collection and visualization system for Siemens S7 PLCs
             </p>
             
             <div class="welcome-steps">
                 <div class="welcome-step">
                     <div class="step-number">1</div>
                     <div class="step-text">
-                        <div class="step-title">Добавьте ПЛК</div>
-                        <div class="step-desc">Укажите IP-адрес, порт, rack и slot вашего контроллера</div>
+                        <div class="step-title">Add PLC</div>
+                        <div class="step-desc">Enter IP address, port, rack and slot of your controller</div>
                     </div>
                 </div>
                 <div class="welcome-step">
                     <div class="step-number">2</div>
                     <div class="step-text">
-                        <div class="step-title">Настройте теги</div>
-                        <div class="step-desc">Добавьте переменные для опроса: DB, адрес, тип данных</div>
+                        <div class="step-title">Configure Tags</div>
+                        <div class="step-desc">Add variables to poll: DB, address, data type</div>
                     </div>
                 </div>
                 <div class="welcome-step">
                     <div class="step-number">3</div>
                     <div class="step-text">
-                        <div class="step-title">Смотрите тренды</div>
-                        <div class="step-desc">Данные автоматически собираются и отображаются на графиках</div>
+                        <div class="step-title">View Trends</div>
+                        <div class="step-desc">Data is automatically collected and displayed on charts</div>
                     </div>
                 </div>
             </div>
             
             <div class="welcome-actions">
                 <button class="btn btn-glow" onclick="startSetup()">
-                    🚀 Начать настройку
+                    🚀 Start Setup
                 </button>
             </div>
         </div>
@@ -889,7 +1051,7 @@
 
     <!-- Connection Banner -->
     <div class="connection-banner" id="connectionBanner">
-        ⚠️ <span id="bannerText">Нет подключения к ПЛК</span>
+        ⚠️ <span id="bannerText">No PLC connection</span>
     </div>
     
     <header class="header">
@@ -899,8 +1061,11 @@
         <div style="display: flex; align-items: center; gap: 1rem;">
             <div class="status-badge">
                 <span class="status-dot" id="statusDot"></span>
-                <span id="statusText">Проверка...</span>
+                <span id="statusText">Checking...</span>
             </div>
+            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+                <span id="themeIcon">🌙</span>
+            </button>
         </div>
     </header>
     
@@ -908,8 +1073,8 @@
         <aside class="sidebar">
             <!-- PLC Selector -->
             <div class="sidebar-header">
-                <div class="sidebar-title">ПЛК</div>
-                <button class="add-btn" onclick="showPLCForm()" title="Добавить ПЛК">+</button>
+                <div class="sidebar-title">PLCs</div>
+                <button class="add-btn" onclick="showPLCForm()" title="Add PLC">+</button>
             </div>
             <div class="plc-selector" id="plcSelector">
                 <!-- PLCs will be loaded here -->
@@ -917,8 +1082,8 @@
             
             <!-- Tags -->
             <div class="sidebar-header" style="margin-top: 1rem;">
-                <div class="sidebar-title">Теги</div>
-                <button class="add-btn" onclick="openModal()" title="Добавить тег">+</button>
+                <div class="sidebar-title">Tags</div>
+                <button class="add-btn" onclick="openModal()" title="Add tag">+</button>
             </div>
             <div class="tag-list" id="tagList">
                 <!-- Tags will be loaded here -->
@@ -926,41 +1091,55 @@
         </aside>
         
         <section class="content">
-            <!-- Stats -->
-            <div class="stats-grid" id="statsGrid">
-                <div class="stat-card">
-                    <div class="stat-label">Текущее значение</div>
-                    <div class="stat-value accent" id="currentValue">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Минимум</div>
-                    <div class="stat-value secondary" id="minValue">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Максимум</div>
-                    <div class="stat-value warning" id="maxValue">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Среднее</div>
-                    <div class="stat-value success" id="avgValue">--</div>
-                </div>
-            </div>
-            
             <!-- Chart -->
-            <div class="chart-container">
+            <div class="chart-container" id="chartContainer">
                 <div class="chart-header">
-                    <h2 class="chart-title" id="chartTitle">Выберите тег</h2>
-                    <div class="time-selector">
-                        <button class="time-btn" data-minutes="5">5м</button>
-                        <button class="time-btn" data-minutes="15">15м</button>
-                        <button class="time-btn active" data-minutes="60">1ч</button>
-                        <button class="time-btn" data-minutes="360">6ч</button>
-                        <button class="time-btn" data-minutes="1440">24ч</button>
+                    <div style="display: flex; align-items: center;">
+                        <h2 class="chart-title" id="chartTitle">Select a tag</h2>
+                        <span class="zoom-hint">🖱️ Scroll — zoom, hold LMB — pan</span>
+                    </div>
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <div class="time-selector">
+                            <button class="time-btn" data-minutes="5">5м</button>
+                            <button class="time-btn" data-minutes="15">15м</button>
+                            <button class="time-btn active" data-minutes="60">1ч</button>
+                            <button class="time-btn" data-minutes="360">6ч</button>
+                            <button class="time-btn" data-minutes="1440">24ч</button>
+                        </div>
+                        <div class="chart-controls">
+                            <button class="chart-btn" onclick="resetZoom()" title="Reset zoom">🔄</button>
+                            <button class="chart-btn" onclick="toggleFullscreen()" title="Fullscreen" id="fullscreenBtn">⛶</button>
+                        </div>
                     </div>
                 </div>
                 <div class="chart-wrapper">
                     <canvas id="trendChart"></canvas>
                 </div>
+            </div>
+            
+            <!-- Stats Table -->
+            <div class="stats-card">
+                <div class="stats-card-header">
+                    <div class="stats-card-title">📊 Tag Statistics</div>
+                    <span style="color: var(--text-muted); font-size: 0.875rem;" id="statsPeriod">last 1 hour</span>
+                </div>
+                <table class="stats-table" id="statsTable">
+                    <thead>
+                        <tr>
+                            <th>Tag</th>
+                            <th>Current</th>
+                            <th>Min</th>
+                            <th>Max</th>
+                            <th>Avg</th>
+                            <th>Points</th>
+                        </tr>
+                    </thead>
+                    <tbody id="statsTableBody">
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: var(--text-muted);">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </section>
     </main>
@@ -969,51 +1148,51 @@
     <div class="modal-overlay" id="modalOverlay">
         <div class="modal">
             <div class="modal-header">
-                <h3 class="modal-title">➕ Добавить тег</h3>
+                <h3 class="modal-title">➕ Add Tag</h3>
                 <button class="modal-close" onclick="closeModal()">×</button>
             </div>
             
             <form id="tagForm" onsubmit="submitTag(event)">
                 <div class="form-group">
-                    <label class="form-label">Имя тега</label>
+                    <label class="form-label">Tag Name</label>
                     <input type="text" class="form-input" id="tagName" placeholder="Temperature" required>
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label">Описание</label>
-                    <input type="text" class="form-input" id="tagDescription" placeholder="Температура в помещении">
+                    <label class="form-label">Description</label>
+                    <input type="text" class="form-input" id="tagDescription" placeholder="Room temperature">
                 </div>
                 
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">DB номер</label>
+                        <label class="form-label">DB Number</label>
                         <input type="number" class="form-input" id="tagDbNumber" placeholder="1" min="1" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Адрес (байт)</label>
+                        <label class="form-label">Address (byte)</label>
                         <input type="number" class="form-input" id="tagAddress" placeholder="0" min="0" required>
                     </div>
                 </div>
                 
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">Тип данных</label>
+                        <label class="form-label">Data Type</label>
                         <select class="form-select" id="tagDataType" onchange="updateDataSize()">
-                            <option value="real" data-size="4">REAL (4 байта)</option>
-                            <option value="int" data-size="2">INT (2 байта)</option>
-                            <option value="dint" data-size="4">DINT (4 байта)</option>
-                            <option value="word" data-size="2">WORD (2 байта)</option>
-                            <option value="dword" data-size="4">DWORD (4 байта)</option>
-                            <option value="bool" data-size="1">BOOL (1 байт)</option>
+                            <option value="real" data-size="4">REAL (4 bytes)</option>
+                            <option value="int" data-size="2">INT (2 bytes)</option>
+                            <option value="dint" data-size="4">DINT (4 bytes)</option>
+                            <option value="word" data-size="2">WORD (2 bytes)</option>
+                            <option value="dword" data-size="4">DWORD (4 bytes)</option>
+                            <option value="bool" data-size="1">BOOL (1 byte)</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Интервал опроса</label>
+                        <label class="form-label">Poll Interval</label>
                         <select class="form-select" id="tagPollInterval">
-                            <option value="500">500 мс</option>
-                            <option value="1000" selected>1 сек</option>
-                            <option value="2000">2 сек</option>
-                            <option value="5000">5 сек</option>
+                            <option value="500">500 ms</option>
+                            <option value="1000" selected>1 sec</option>
+                            <option value="2000">2 sec</option>
+                            <option value="5000">5 sec</option>
                         </select>
                     </div>
                 </div>
@@ -1021,8 +1200,8 @@
                 <input type="hidden" id="tagDataSize" value="4">
                 
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Отмена</button>
-                    <button type="submit" class="btn btn-primary">Добавить</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add</button>
                 </div>
             </form>
         </div>
@@ -1032,7 +1211,7 @@
     <div class="modal-overlay" id="plcFormModal">
         <div class="modal" style="max-width: 420px;">
             <div class="modal-header">
-                <h3 class="modal-title" id="plcFormTitle">➕ Добавить ПЛК</h3>
+                <h3 class="modal-title" id="plcFormTitle">➕ Add PLC</h3>
                 <button class="modal-close" onclick="cancelPLCForm()">×</button>
             </div>
             
@@ -1040,20 +1219,20 @@
                 <input type="hidden" id="plcEditId" value="">
                 
                 <div class="form-group">
-                    <label class="form-label">Имя ПЛК</label>
+                    <label class="form-label">PLC Name</label>
                     <input type="text" class="form-input" id="plcName" placeholder="MainPLC" required>
                 </div>
                 
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">IP адрес</label>
+                        <label class="form-label">IP Address</label>
                         <input type="text" class="form-input" id="plcIP" placeholder="192.168.1.10" required>
-                        <div class="form-hint">Симуляция: 127.0.0.1</div>
+                        <div class="form-hint">Simulation: 127.0.0.1</div>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Порт</label>
+                        <label class="form-label">Port</label>
                         <input type="number" class="form-input" id="plcPort" value="102" min="1" max="65535">
-                        <div class="form-hint">Симуляция: 2000</div>
+                        <div class="form-hint">Simulation: 2000</div>
                     </div>
                 </div>
                 
@@ -1069,8 +1248,8 @@
                 </div>
                 
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" onclick="cancelPLCForm()">Отмена</button>
-                    <button type="submit" class="btn btn-primary" id="plcSubmitBtn">Добавить</button>
+                    <button type="button" class="btn btn-secondary" onclick="cancelPLCForm()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="plcSubmitBtn">Add</button>
                 </div>
             </form>
         </div>
@@ -1079,7 +1258,7 @@
     <!-- Toast -->
     <div class="toast" id="toast">
         <span class="toast-icon" id="toastIcon">✅</span>
-        <span id="toastMessage">Сообщение</span>
+        <span id="toastMessage">Message</span>
     </div>
     
     <script>
@@ -1089,25 +1268,27 @@
         let selectedMinutes = 60;
         let chart = null;
         let updateInterval = null;
+        let tagsData = [];  // Хранение данных тегов для статистики
+        
+        // Цветовая палитра для линий графика
+        const chartColors = [
+            { border: '#00d4aa', bg: 'rgba(0, 212, 170, 0.1)' },    // Бирюзовый
+            { border: '#7c3aed', bg: 'rgba(124, 58, 237, 0.1)' },   // Фиолетовый
+            { border: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },   // Оранжевый
+            { border: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' },    // Красный
+            { border: '#22c55e', bg: 'rgba(34, 197, 94, 0.1)' },    // Зелёный
+            { border: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },   // Синий
+            { border: '#ec4899', bg: 'rgba(236, 72, 153, 0.1)' },   // Розовый
+            { border: '#eab308', bg: 'rgba(234, 179, 8, 0.1)' },    // Жёлтый
+            { border: '#06b6d4', bg: 'rgba(6, 182, 212, 0.1)' },    // Циан
+            { border: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.1)' },   // Индиго
+        ];
         
         // Chart configuration
         const chartConfig = {
             type: 'line',
             data: {
-                datasets: [{
-                    label: 'Значение',
-                    data: [],
-                    borderColor: '#00d4aa',
-                    backgroundColor: 'rgba(0, 212, 170, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: 0,
-                    pointHoverRadius: 6,
-                    pointHoverBackgroundColor: '#00d4aa',
-                    pointHoverBorderColor: '#fff',
-                    pointHoverBorderWidth: 2
-                }]
+                datasets: []  // Будут добавляться динамически
             },
             options: {
                 responsive: true,
@@ -1118,22 +1299,48 @@
                 },
                 plugins: {
                     legend: {
-                        display: false
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() || '#e4e4e7',
+                            font: {
+                                family: 'Inter',
+                                size: 12
+                            },
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                            padding: 20
+                        }
                     },
                     tooltip: {
                         backgroundColor: '#1a1a24',
                         titleColor: '#e4e4e7',
-                        bodyColor: '#00d4aa',
+                        bodyColor: '#e4e4e7',
                         bodyFont: {
                             family: 'JetBrains Mono',
-                            size: 14
+                            size: 12
                         },
                         borderColor: '#27272a',
                         borderWidth: 1,
                         padding: 12,
-                        displayColors: false,
+                        displayColors: true,
                         callbacks: {
-                            label: ctx => ctx.parsed.y.toFixed(2)
+                            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}`
+                        }
+                    },
+                    zoom: {
+                        pan: {
+                            enabled: true,
+                            mode: 'xy',
+                        },
+                        zoom: {
+                            wheel: {
+                                enabled: true,
+                            },
+                            pinch: {
+                                enabled: true
+                            },
+                            mode: 'xy',
                         }
                     }
                 },
@@ -1179,6 +1386,88 @@
             chart = new Chart(ctx, chartConfig);
         }
         
+        // Reset zoom
+        function resetZoom() {
+            if (chart) {
+                chart.resetZoom();
+            }
+        }
+        
+        // Toggle fullscreen
+        function toggleFullscreen() {
+            const container = document.getElementById('chartContainer');
+            const btn = document.getElementById('fullscreenBtn');
+            
+            container.classList.toggle('fullscreen');
+            
+            if (container.classList.contains('fullscreen')) {
+                btn.textContent = '✕';
+                btn.title = 'Exit fullscreen';
+            } else {
+                btn.textContent = '⛶';
+                btn.title = 'Fullscreen';
+            }
+            
+            // Resize chart after transition
+            setTimeout(() => {
+                chart.resize();
+            }, 100);
+        }
+        
+        // Toggle theme
+        function toggleTheme() {
+            const html = document.documentElement;
+            const icon = document.getElementById('themeIcon');
+            
+            if (html.getAttribute('data-theme') === 'light') {
+                html.removeAttribute('data-theme');
+                icon.textContent = '🌙';
+                localStorage.setItem('theme', 'dark');
+            } else {
+                html.setAttribute('data-theme', 'light');
+                icon.textContent = '☀️';
+                localStorage.setItem('theme', 'light');
+            }
+            
+            // Update chart colors
+            updateChartColors();
+        }
+        
+        // Update chart colors based on theme
+        function updateChartColors() {
+            if (!chart) return;
+            
+            const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim();
+            const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--border').trim();
+            
+            chart.options.scales.x.grid.color = gridColor;
+            chart.options.scales.y.grid.color = gridColor;
+            chart.options.scales.x.ticks.color = textColor;
+            chart.options.scales.y.ticks.color = textColor;
+            chart.options.plugins.legend.labels.color = getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim();
+            
+            chart.update('none');
+        }
+        
+        // Load saved theme
+        function loadSavedTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+                document.getElementById('themeIcon').textContent = '☀️';
+            }
+        }
+        
+        // Escape key to exit fullscreen
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const container = document.getElementById('chartContainer');
+                if (container.classList.contains('fullscreen')) {
+                    toggleFullscreen();
+                }
+            }
+        });
+        
         // Load tags
         async function loadTags() {
             try {
@@ -1198,34 +1487,40 @@
                     tagList.innerHTML = `
                         <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
                             <div style="font-size: 2rem; margin-bottom: 0.5rem;">📭</div>
-                            <div>Нет тегов</div>
-                            <div style="font-size: 0.75rem; margin-top: 0.5rem;">Нажмите + чтобы добавить</div>
+                            <div>No tags</div>
+                            <div style="font-size: 0.75rem; margin-top: 0.5rem;">Click + to add</div>
                         </div>
                     `;
                     return;
                 }
                 
-                tagList.innerHTML = tags.map(tag => `
+                tagList.innerHTML = tags.map((tag, index) => {
+                    const color = chartColors[index % chartColors.length];
+                    return `
                     <div class="tag-item ${selectedTagId === tag.id ? 'active' : ''}" 
                          data-id="${tag.id}" 
                          onclick="selectTag(${tag.id}, '${tag.name}')">
                         <button class="tag-delete" onclick="deleteTag(event, ${tag.id}, '${tag.name}')" title="Удалить">×</button>
-                        <div class="tag-name">${tag.name}</div>
+                        <div class="tag-name">
+                            <span class="tag-color-dot" style="background: ${color.border}"></span>
+                            ${tag.name}
+                        </div>
                         <div class="tag-value">${tag.latest_value !== null ? tag.latest_value.toFixed(2) : '--'}</div>
                         <div class="tag-meta">DB${tag.db_number}.${tag.data_type.toUpperCase()}${tag.start_address}</div>
                     </div>
-                `).join('');
+                `}).join('');
                 
-                // Auto-select first tag
+                // Auto-select first tag for statistics
                 if (tags.length > 0 && !selectedTagId) {
-                    selectTag(tags[0].id, tags[0].name);
+                    selectedTagId = tags[0].id;
+                    document.querySelector('.tag-item')?.classList.add('active');
                 }
             } catch (error) {
                 console.error('Error loading tags:', error);
             }
         }
         
-        // Select tag
+        // Select tag (для подсветки в sidebar, статистика по выбранному)
         async function selectTag(tagId, tagName) {
             selectedTagId = tagId;
             
@@ -1234,93 +1529,162 @@
                 el.classList.toggle('active', parseInt(el.dataset.id) === tagId);
             });
             
-            document.getElementById('chartTitle').textContent = tagName;
-            
-            // Load data
+            // Загружаем статистику для выбранного тега
+            await loadStatistics();
+        }
+        
+        // Инициализация отображения трендов
+        async function initTrends() {
             await loadTrendData();
             await loadStatistics();
             
-            // Start auto-update (only current values and stats, not historical trend data)
+            // Start auto-update
             if (updateInterval) clearInterval(updateInterval);
             updateInterval = setInterval(() => {
-                loadStatistics();  // Update statistics
-                loadTags();        // Update current values
-                updateLiveTrendData(); // Add new data points to existing chart
+                loadStatistics();      // Update statistics
+                loadTags();            // Update current values in sidebar
+                updateLiveTrendData(); // Add new data points to chart
             }, 1000);
         }
         
-        // Load trend data
+        // Load trend data for ALL tags
         async function loadTrendData() {
-            if (!selectedTagId) return;
-
             try {
-                const response = await fetch(`/api/tags/${selectedTagId}/trend?minutes=${selectedMinutes}`);
-                const data = await response.json();
-
-                chart.data.datasets[0].data = data.map(point => ({
-                    x: new Date(point.timestamp),
-                    y: point.value
-                }));
+                const url = selectedPlcId 
+                    ? `/api/trends?plc_id=${selectedPlcId}&minutes=${selectedMinutes}`
+                    : `/api/trends?minutes=${selectedMinutes}`;
+                    
+                const response = await fetch(url);
+                if (!response.ok) return;
+                
+                const trends = await response.json();
+                tagsData = trends;  // Сохраняем для статистики
+                
+                // Создаём датасеты для каждого тега
+                chart.data.datasets = trends.map((trend, index) => {
+                    const color = chartColors[index % chartColors.length];
+                    return {
+                        label: trend.tag_name,
+                        data: trend.data.map(point => ({
+                            x: new Date(point.timestamp),
+                            y: point.value
+                        })),
+                        borderColor: color.border,
+                        backgroundColor: color.bg,
+                        borderWidth: 2,
+                        fill: false,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 6,
+                        pointHoverBackgroundColor: color.border,
+                        pointHoverBorderColor: '#fff',
+                        pointHoverBorderWidth: 2
+                    };
+                });
+                
                 chart.update('none');
+                
+                // Update title
+                document.getElementById('chartTitle').textContent = 
+                    trends.length > 0 ? `Trends (${trends.length} tags)` : 'No data';
+                    
             } catch (error) {
                 console.error('Error loading trend data:', error);
             }
         }
 
-        // Update live trend data (add new points to existing chart)
+        // Update live trend data (add new points to all datasets)
         async function updateLiveTrendData() {
-            if (!selectedTagId || !chart) return;
+            if (!chart || chart.data.datasets.length === 0) return;
 
             try {
-                // Get latest value
-                const response = await fetch(`/api/tags/${selectedTagId}/latest`);
+                // Получаем последние значения для всех тегов
+                const url = selectedPlcId ? `/api/tags?plc_id=${selectedPlcId}` : '/api/tags';
+                const response = await fetch(url);
                 if (!response.ok) return;
 
-                const latest = await response.json();
-                const newPoint = {
-                    x: new Date(latest.timestamp),
-                    y: latest.value
-                };
-
-                // Check if this point is newer than the last point in chart
-                const currentData = chart.data.datasets[0].data;
-                if (currentData.length === 0) return;
-
-                const lastPoint = currentData[currentData.length - 1];
-                if (newPoint.x > lastPoint.x) {
-                    // Add new point and remove old points if chart is full
-                    currentData.push(newPoint);
-
-                    // Keep only points within selected time range
-                    const cutoffTime = new Date();
-                    cutoffTime.setMinutes(cutoffTime.getMinutes() - selectedMinutes);
-
-                    chart.data.datasets[0].data = currentData.filter(point => point.x >= cutoffTime);
-                    chart.update('none');
-                }
+                const tags = await response.json();
+                
+                const cutoffTime = new Date();
+                cutoffTime.setMinutes(cutoffTime.getMinutes() - selectedMinutes);
+                
+                // Обновляем каждый датасет
+                chart.data.datasets.forEach((dataset, index) => {
+                    const tag = tags.find(t => t.name === dataset.label);
+                    if (tag && tag.latest_value !== null && tag.latest_time) {
+                        const newPoint = {
+                            x: new Date(tag.latest_time),
+                            y: tag.latest_value
+                        };
+                        
+                        const currentData = dataset.data;
+                        if (currentData.length > 0) {
+                            const lastPoint = currentData[currentData.length - 1];
+                            if (newPoint.x > lastPoint.x) {
+                                currentData.push(newPoint);
+                                // Удаляем старые точки
+                                dataset.data = currentData.filter(point => point.x >= cutoffTime);
+                            }
+                        }
+                    }
+                });
+                
+                chart.update('none');
             } catch (error) {
                 console.error('Error updating live trend data:', error);
             }
         }
         
-        // Load statistics
+        // Load statistics for all tags
         async function loadStatistics() {
-            if (!selectedTagId) return;
-            
             try {
-                const response = await fetch(`/api/tags/${selectedTagId}/statistics?minutes=${selectedMinutes}`);
-                const stats = await response.json();
+                // Получаем список тегов
+                const url = selectedPlcId ? `/api/tags?plc_id=${selectedPlcId}` : '/api/tags';
+                const tagsResponse = await fetch(url);
+                if (!tagsResponse.ok) return;
                 
-                document.getElementById('minValue').textContent = stats.min?.toFixed(2) ?? '--';
-                document.getElementById('maxValue').textContent = stats.max?.toFixed(2) ?? '--';
-                document.getElementById('avgValue').textContent = stats.avg?.toFixed(2) ?? '--';
-                
-                // Get latest value
-                const latestResponse = await fetch(`/api/tags/${selectedTagId}/latest`);
-                if (latestResponse.ok) {
-                    const latest = await latestResponse.json();
-                    document.getElementById('currentValue').textContent = latest.value.toFixed(2);
+                const tags = await tagsResponse.json();
+                if (tags.length === 0) {
+                    document.getElementById('statsTableBody').innerHTML = `
+                        <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No tags</td></tr>
+                    `;
+                    return;
                 }
+                
+                // Update period text
+                const periodText = {5: '5 min', 15: '15 min', 60: '1 hour', 360: '6 hours', 1440: '24 hours'};
+                document.getElementById('statsPeriod').textContent = `last ${periodText[selectedMinutes] || selectedMinutes + ' min'}`;
+                
+                // Загружаем статистику для каждого тега
+                const statsPromises = tags.map(tag => 
+                    fetch(`/api/tags/${tag.id}/statistics?minutes=${selectedMinutes}`)
+                        .then(r => r.ok ? r.json() : null)
+                        .catch(() => null)
+                );
+                
+                const allStats = await Promise.all(statsPromises);
+                
+                // Формируем таблицу
+                const tbody = document.getElementById('statsTableBody');
+                tbody.innerHTML = tags.map((tag, index) => {
+                    const stats = allStats[index];
+                    const color = chartColors[index % chartColors.length];
+                    
+                    return `
+                        <tr>
+                            <td>
+                                <span class="tag-color" style="background: ${color.border}"></span>
+                                ${tag.name}
+                            </td>
+                            <td style="color: var(--accent); font-weight: 600;">${tag.latest_value?.toFixed(2) ?? '--'}</td>
+                            <td style="color: var(--accent-secondary);">${stats?.min?.toFixed(2) ?? '--'}</td>
+                            <td style="color: var(--warning);">${stats?.max?.toFixed(2) ?? '--'}</td>
+                            <td style="color: var(--success);">${stats?.avg?.toFixed(2) ?? '--'}</td>
+                            <td style="color: var(--text-muted);">${stats?.count ?? 0}</td>
+                        </tr>
+                    `;
+                }).join('');
+                
             } catch (error) {
                 console.error('Error loading statistics:', error);
             }
@@ -1332,16 +1696,7 @@
                 document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 selectedMinutes = parseInt(btn.dataset.minutes);
-                loadTrendData();
-                loadStatistics();
-
-                // Start auto-update for new period (only current values, not historical data)
-                if (updateInterval) clearInterval(updateInterval);
-                updateInterval = setInterval(() => {
-                    loadStatistics();  // Update stats
-                    loadTags();        // Update current values
-                    updateLiveTrendData(); // Add new data points to existing chart
-                }, 1000);
+                initTrends();  // Перезагрузить все тренды
             });
         });
         
@@ -1367,7 +1722,7 @@
             event.preventDefault();
             
             if (!selectedPlcId) {
-                showToast('Сначала выберите ПЛК', 'error');
+                showToast('Please select a PLC first', 'error');
                 return;
             }
             
@@ -1391,15 +1746,16 @@
                 
                 if (response.ok) {
                     const result = await response.json();
-                    showToast(`Тег "${result.name}" добавлен`, 'success');
+                    showToast(`Tag "${result.name}" added`, 'success');
                     closeModal();
-                    loadTags();
+                    await loadTags();
+                    await initTrends();
                 } else {
                     const error = await response.json();
-                    showToast(error.detail || 'Ошибка создания тега', 'error');
+                    showToast(error.detail || 'Error creating tag', 'error');
                 }
             } catch (error) {
-                showToast('Ошибка сети', 'error');
+                showToast('Network error', 'error');
             }
         }
         
@@ -1407,22 +1763,23 @@
         async function deleteTag(event, tagId, tagName) {
             event.stopPropagation();
             
-            if (!confirm(`Удалить тег "${tagName}"?`)) return;
+            if (!confirm(`Delete tag "${tagName}"?`)) return;
             
             try {
                 const response = await fetch(`/api/tags/${tagId}`, { method: 'DELETE' });
                 
                 if (response.ok) {
-                    showToast(`Тег "${tagName}" удалён`, 'success');
+                    showToast(`Tag "${tagName}" deleted`, 'success');
                     if (selectedTagId === tagId) {
                         selectedTagId = null;
                     }
-                    loadTags();
+                    await loadTags();
+                    await initTrends();
                 } else {
-                    showToast('Ошибка удаления', 'error');
+                    showToast('Delete error', 'error');
                 }
             } catch (error) {
-                showToast('Ошибка сети', 'error');
+                showToast('Network error', 'error');
             }
         }
         
@@ -1468,7 +1825,7 @@
                 const plcSelector = document.getElementById('plcSelector');
                 
                 if (plcs.length === 0) {
-                    plcSelector.innerHTML = '<div style="color: var(--text-muted); font-size: 0.875rem; padding: 0.5rem;">Нет ПЛК</div>';
+                    plcSelector.innerHTML = '<div style="color: var(--text-muted); font-size: 0.875rem; padding: 0.5rem;">No PLCs</div>';
                     return;
                 }
                 
@@ -1481,11 +1838,11 @@
                     <div class="plc-btn ${selectedPlcId === plc.id ? 'active' : ''}" onclick="selectPLC(${plc.id})">
                         <div class="plc-main">
                             <div class="plc-name">${plc.name}</div>
-                            <div class="plc-info">${plc.ip_address} • ${plc.tag_count} тегов</div>
+                            <div class="plc-info">${plc.ip_address} • ${plc.tag_count} tags</div>
                         </div>
                         <div class="plc-actions">
-                            <button class="plc-action-btn" onclick="event.stopPropagation(); editPLC(${plc.id}, '${plc.name}', '${plc.ip_address}', ${plc.tcp_port}, ${plc.rack}, ${plc.slot})" title="Редактировать">✏️</button>
-                            <button class="plc-action-btn delete" onclick="event.stopPropagation(); deletePLC(${plc.id}, '${plc.name}')" title="Удалить">🗑️</button>
+                            <button class="plc-action-btn" onclick="event.stopPropagation(); editPLC(${plc.id}, '${plc.name}', '${plc.ip_address}', ${plc.tcp_port}, ${plc.rack}, ${plc.slot})" title="Edit">✏️</button>
+                            <button class="plc-action-btn delete" onclick="event.stopPropagation(); deletePLC(${plc.id}, '${plc.name}')" title="Delete">🗑️</button>
                         </div>
                     </div>
                 `).join('');
@@ -1494,17 +1851,18 @@
             }
         }
         
-        function selectPLC(plcId) {
+        async function selectPLC(plcId) {
             selectedPlcId = plcId;
             selectedTagId = null;  // Сбрасываем выбранный тег
-            loadPLCs();  // Обновляем подсветку
-            loadTags();  // Загружаем теги для выбранного ПЛК
+            await loadPLCs();   // Обновляем подсветку
+            await loadTags();   // Загружаем теги для выбранного ПЛК
+            await initTrends(); // Перезагружаем тренды для нового ПЛК
         }
         
         function showPLCForm(editMode = false) {
             document.getElementById('plcFormModal').classList.add('active');
-            document.getElementById('plcFormTitle').textContent = editMode ? '✏️ Редактировать ПЛК' : '➕ Добавить ПЛК';
-            document.getElementById('plcSubmitBtn').textContent = editMode ? 'Сохранить' : 'Добавить';
+            document.getElementById('plcFormTitle').textContent = editMode ? '✏️ Edit PLC' : '➕ Add PLC';
+            document.getElementById('plcSubmitBtn').textContent = editMode ? 'Save' : 'Add';
             
             if (!editMode) {
                 document.getElementById('plcForm').reset();
@@ -1565,19 +1923,20 @@
                     document.getElementById('welcomeScreen').style.display = 'none';
                     
                     if (editId) {
-                        showToast(`ПЛК "${data.name}" обновлён`, 'success');
+                        showToast(`PLC "${data.name}" updated`, 'success');
                     } else {
-                        showToast(`ПЛК "${data.name}" добавлен`, 'success');
+                        showToast(`PLC "${data.name}" added`, 'success');
                     }
                     cancelPLCForm();
-                    loadPLCs();
-                    loadTags();
+                    await loadPLCs();
+                    await loadTags();
+                    await initTrends();
                 } else {
                     const error = await response.json();
-                    showToast(error.detail || 'Ошибка сохранения', 'error');
+                    showToast(error.detail || 'Save error', 'error');
                 }
             } catch (error) {
-                showToast('Ошибка сети', 'error');
+                showToast('Network error', 'error');
             }
         }
         
@@ -1586,7 +1945,7 @@
             const bannerText = document.getElementById('bannerText');
             banner.classList.add('show');
             banner.style.background = 'linear-gradient(135deg, var(--warning), #b45309)';
-            bannerText.innerHTML = '⚠️ Конфигурация изменена. <button onclick="restartCollector()" style="background: white; color: #b45309; border: none; padding: 0.25rem 0.75rem; border-radius: 4px; cursor: pointer; font-weight: 500; margin-left: 0.5rem;">🔄 Перезапустить</button>';
+            bannerText.innerHTML = '⚠️ Configuration changed. <button onclick="restartCollector()" style="background: white; color: #b45309; border: none; padding: 0.25rem 0.75rem; border-radius: 4px; cursor: pointer; font-weight: 500; margin-left: 0.5rem;">🔄 Restart</button>';
         }
         
         async function restartCollector() {
@@ -1594,60 +1953,60 @@
                 const response = await fetch('/api/collector/restart', { method: 'POST' });
                 
                 if (response.ok) {
-                    showToast('Коллектор перезапускается...', 'success');
+                    showToast('Collector restarting...', 'success');
                     
-                    // Скрываем баннер через 2 секунды
                     setTimeout(() => {
                         document.getElementById('connectionBanner').classList.remove('show');
                         loadStatus();
                         loadTags();
                     }, 2000);
                 } else {
-                    showToast('Ошибка перезапуска', 'error');
+                    showToast('Restart error', 'error');
                 }
             } catch (error) {
-                showToast('Ошибка сети', 'error');
+                showToast('Network error', 'error');
             }
         }
         
         async function deletePLC(id, name) {
-            if (!confirm(`Удалить ПЛК "${name}" и все его теги?`)) return;
+            if (!confirm(`Delete PLC "${name}" and all its tags?`)) return;
             
             try {
                 const response = await fetch(`/api/plcs/${id}`, { method: 'DELETE' });
                 
                 if (response.ok) {
-                    showToast(`ПЛК "${name}" удалён`, 'success');
-                    loadPLCs();
-                    loadTags();
+                    showToast(`PLC "${name}" deleted`, 'success');
+                    await loadPLCs();
+                    await loadTags();
+                    await initTrends();
                 } else {
-                    showToast('Ошибка удаления', 'error');
+                    showToast('Delete error', 'error');
                 }
             } catch (error) {
-                showToast('Ошибка сети', 'error');
+                showToast('Network error', 'error');
             }
         }
         
-        // То же для тегов
+        // Same for tags
         async function deleteTagWithRestart(event, tagId, tagName) {
             event.stopPropagation();
             
-            if (!confirm(`Удалить тег "${tagName}"?`)) return;
+            if (!confirm(`Delete tag "${tagName}"?`)) return;
             
             try {
                 const response = await fetch(`/api/tags/${tagId}`, { method: 'DELETE' });
                 
                 if (response.ok) {
-                    showToast(`Тег "${tagName}" удалён`, 'success');
+                    showToast(`Tag "${tagName}" deleted`, 'success');
                     if (selectedTagId === tagId) {
                         selectedTagId = null;
                     }
                     loadTags();
                 } else {
-                    showToast('Ошибка удаления', 'error');
+                    showToast('Delete error', 'error');
                 }
             } catch (error) {
-                showToast('Ошибка сети', 'error');
+                showToast('Network error', 'error');
             }
         }
         
@@ -1666,21 +2025,21 @@
                 dot.className = 'status-dot';
                 
                 if (status.connection_status === 'connected') {
-                    text.textContent = 'Подключено';
+                    text.textContent = 'Connected';
                     banner.classList.remove('show');
                 } else if (status.connection_status === 'disconnected') {
                     dot.classList.add('disconnected');
-                    text.textContent = 'Отключено';
+                    text.textContent = 'Disconnected';
                     banner.classList.add('show');
-                    bannerText.textContent = 'Нет подключения к ПЛК. Коллектор пытается переподключиться...';
+                    bannerText.textContent = 'No PLC connection. Collector is trying to reconnect...';
                 } else if (status.connection_status === 'stopped') {
                     dot.classList.add('stopped');
-                    text.textContent = 'Остановлен';
+                    text.textContent = 'Stopped';
                     banner.classList.add('show');
-                    bannerText.textContent = 'Коллектор остановлен';
+                    bannerText.textContent = 'Collector stopped';
                 } else {
                     dot.classList.add('stopped');
-                    text.textContent = 'Неизвестно';
+                    text.textContent = 'Unknown';
                 }
                 
                 return status;
@@ -1689,7 +2048,7 @@
                 const dot = document.getElementById('statusDot');
                 const text = document.getElementById('statusText');
                 dot.className = 'status-dot stopped';
-                text.textContent = 'Ошибка';
+                text.textContent = 'Error';
                 return null;
             }
         }
@@ -1718,21 +2077,27 @@
         
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
+            // Load saved theme first
+            loadSavedTheme();
+            
             initChart();
+            
+            // Update chart colors after theme is set
+            setTimeout(updateChartColors, 100);
             
             // Check if first run
             const isFirstRun = await checkFirstRun();
             
             if (!isFirstRun) {
-                await loadPLCs();  // Сначала ПЛК (установит selectedPlcId)
-                await loadTags();  // Потом теги (отфильтрует по ПЛК)
+                await loadPLCs();   // Сначала ПЛК (установит selectedPlcId)
+                await loadTags();   // Потом теги (отфильтрует по ПЛК)
+                await initTrends(); // Загружаем все тренды на график
             }
             
             loadStatus();
             
-            // Периодически обновляем
+            // Периодически обновляем статус
             setInterval(loadStatus, 1000);
-            setInterval(loadTags, 1000);  // Обновляем теги для актуальных значений
         });
     </script>
 </body>
