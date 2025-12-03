@@ -1298,6 +1298,14 @@
                 selectedMinutes = parseInt(btn.dataset.minutes);
                 loadTrendData();
                 loadStatistics();
+
+                // Start auto-update for new period
+                if (updateInterval) clearInterval(updateInterval);
+                updateInterval = setInterval(() => {
+                    loadTrendData();
+                    loadStatistics();
+                    loadTags();
+                }, 1000);
             });
         });
         
