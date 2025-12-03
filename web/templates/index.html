@@ -1246,7 +1246,7 @@
                 loadTrendData();
                 loadStatistics();
                 loadTags();
-            }, 5000);
+            }, 1000);
         }
         
         // Load trend data
@@ -1687,8 +1687,8 @@
             loadStatus();
             
             // Периодически обновляем
-            setInterval(loadStatus, 5000);
-            setInterval(loadTags, 5000);  // Обновляем теги для актуальных значений
+            setInterval(loadStatus, 1000);
+            setInterval(loadTags, 1000);  // Обновляем теги для актуальных значений
         });
     </script>
 </body>
