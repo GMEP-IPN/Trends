@@ -1245,18 +1245,18 @@
             updateInterval = setInterval(() => {
                 loadStatistics();  // Update statistics
                 loadTags();        // Update current values
-                // Trend data only loads when tag or period changes
-            }, 5000);
+                updateLiveTrendData(); // Add new data points to existing chart
+            }, 1000);
         }
         
         // Load trend data
         async function loadTrendData() {
             if (!selectedTagId) return;
-            
+
             try {
                 const response = await fetch(`/api/tags/${selectedTagId}/trend?minutes=${selectedMinutes}`);
                 const data = await response.json();
-                
+
                 chart.data.datasets[0].data = data.map(point => ({
                     x: new Date(point.timestamp),
                     y: point.value
@@ -1264,6 +1264,42 @@
                 chart.update('none');
             } catch (error) {
                 console.error('Error loading trend data:', error);
+            }
+        }
+
+        // Update live trend data (add new points to existing chart)
+        async function updateLiveTrendData() {
+            if (!selectedTagId || !chart) return;
+
+            try {
+                // Get latest value
+                const response = await fetch(`/api/tags/${selectedTagId}/latest`);
+                if (!response.ok) return;
+
+                const latest = await response.json();
+                const newPoint = {
+                    x: new Date(latest.timestamp),
+                    y: latest.value
+                };
+
+                // Check if this point is newer than the last point in chart
+                const currentData = chart.data.datasets[0].data;
+                if (currentData.length === 0) return;
+
+                const lastPoint = currentData[currentData.length - 1];
+                if (newPoint.x > lastPoint.x) {
+                    // Add new point and remove old points if chart is full
+                    currentData.push(newPoint);
+
+                    // Keep only points within selected time range
+                    const cutoffTime = new Date();
+                    cutoffTime.setMinutes(cutoffTime.getMinutes() - selectedMinutes);
+
+                    chart.data.datasets[0].data = currentData.filter(point => point.x >= cutoffTime);
+                    chart.update('none');
+                }
+            } catch (error) {
+                console.error('Error updating live trend data:', error);
             }
         }
         
@@ -1304,8 +1340,8 @@
                 updateInterval = setInterval(() => {
                     loadStatistics();  // Update stats
                     loadTags();        // Update current values
-                    // Don't reload trend data every second - only when period changes
-                }, 5000);
+                    updateLiveTrendData(); // Add new data points to existing chart
+                }, 1000);
             });
         });
         
@@ -1695,8 +1731,8 @@
             loadStatus();
             
             // Периодически обновляем
-            setInterval(loadStatus, 5000);
-            setInterval(loadTags, 5000);  // Обновляем теги для актуальных значений
+            setInterval(loadStatus, 1000);
+            setInterval(loadTags, 1000);  // Обновляем теги для актуальных значений
         });
     </script>
 </body>

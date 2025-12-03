@@ -6,7 +6,7 @@
 # Настройки базы данных
 database:
   # SQLite (по умолчанию) - просто укажите имя файла
-  url: "sqlite:///trends.db"
+  url: "sqlite:///DB/trends.db"
   
   # PostgreSQL (для продакшена):
   # url: "postgresql://user:password@localhost:5432/trends"
@@ -14,7 +14,7 @@ database:
 # Настройки сбора данных
 collector:
   batch_size: 100          # Записей в одном пакете
-  flush_interval_sec: 5    # Интервал сброса буфера (сек)
+  flush_interval_sec: 1    # Интервал сброса буфера (сек)
   reconnect_delay_sec: 5   # Задержка переподключения к ПЛК
 
 # Настройки хранения

@@ -85,6 +85,12 @@ class PLC:
             
         try:
             logger.info(f"🔌 Connecting to {self.plc_ip}:{self.tcp_port}...")
+            # Отключаемся перед новым подключением
+            try:
+                self.client.disconnect()
+            except Exception:
+                pass  # Игнорируем ошибки отключения
+
             # Подключаемся с указанными параметрами
             self.client.connect(self.plc_ip, self.rack, self.slot)
 

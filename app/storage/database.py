@@ -8,6 +8,10 @@ from app.storage.models import Base
 
 
 # Создаём движок БД
+import logging
+logger = logging.getLogger(__name__)
+logger.info(f"Creating database engine with URL: {DATABASE_URL}")
+
 engine = create_engine(
     DATABASE_URL,
     echo=False,  # True для отладки SQL запросов
