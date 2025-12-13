@@ -521,6 +521,9 @@ async def delete_plc(plc_id: int):
 @app.put("/api/plcs/{plc_id}/toggle")
 async def toggle_plc(plc_id: int):
     """Включение/выключение опроса ПЛК"""
+    plc_name = ""
+    new_is_active = False
+    
     with get_session() as session:
         plc = session.query(PLC).filter(PLC.id == plc_id).first()
         
@@ -529,23 +532,27 @@ async def toggle_plc(plc_id: int):
         
         # Переключаем активность
         plc.is_active = not plc.is_active
-        new_status = "enabled" if plc.is_active else "disabled"
+        new_is_active = plc.is_active
+        plc_name = plc.name
         
-        # Автоматический перезапуск коллектора
-        collector_status.request_restart()
-        
-        # Очищаем ошибку при деактивации ПОСЛЕ restart request
-        if not plc.is_active:
-            # Удаляем ошибку из словаря
-            with collector_status._lock:
-                collector_status._plc_errors.pop(plc_id, None)
-                collector_status._plc_statuses.pop(plc_id, None)
-        
-        return {
-            "message": f"PLC '{plc.name}' polling {new_status}",
-            "id": plc_id,
-            "is_active": plc.is_active
-        }
+        # Commit changes before restart
+        session.commit()
+    
+    # Restart collector AFTER database commit
+    collector_status.request_restart()
+    
+    # Очищаем ошибку при деактивации
+    if not new_is_active:
+        with collector_status._lock:
+            collector_status._plc_errors.pop(plc_id, None)
+            collector_status._plc_statuses.pop(plc_id, None)
+    
+    new_status = "enabled" if new_is_active else "disabled"
+    return {
+        "message": f"PLC '{plc_name}' polling {new_status}",
+        "id": plc_id,
+        "is_active": new_is_active
+    }
 
 
 @app.post("/api/collector/restart")

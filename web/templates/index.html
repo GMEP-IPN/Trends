@@ -2402,6 +2402,10 @@
                 if (response.ok) {
                     const result = await response.json();
                     showToast(result.message, 'success');
+                    
+                    // Wait for collector to restart and update statuses
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    
                     await loadPLCs();
                     await loadStatus();  // Update header warning
                 } else {
