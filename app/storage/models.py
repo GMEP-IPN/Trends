@@ -13,6 +13,14 @@ PLC_TYPE_ALLEN_BRADLEY = "allen_bradley"
 
 PLC_TYPES = [PLC_TYPE_SIEMENS_S7, PLC_TYPE_ALLEN_BRADLEY]
 
+# Области памяти Siemens S7
+S7_AREA_DB = "DB"   # Data Blocks
+S7_AREA_I = "I"     # Inputs (Входы)
+S7_AREA_Q = "Q"     # Outputs (Выходы)
+S7_AREA_M = "M"     # Markers (Маркеры)
+
+S7_MEMORY_AREAS = [S7_AREA_DB, S7_AREA_I, S7_AREA_Q, S7_AREA_M]
+
 
 class PLC(Base):
     """Конфигурация ПЛК"""
@@ -52,7 +60,8 @@ class Tag(Base):
     description = Column(String(255))
     
     # Адресация S7 (опционально - только для Siemens)
-    db_number = Column(Integer, nullable=True)        # NULL для Allen-Bradley
+    memory_area = Column(String(10), default="DB")    # DB, I, Q, M (область памяти S7)
+    db_number = Column(Integer, nullable=True)        # NULL для Allen-Bradley или I/Q/M
     start_address = Column(Integer, nullable=True)    # NULL для Allen-Bradley
     bit_number = Column(Integer, default=0)           # Номер бита (0-7, только для BOOL в S7)
     data_type = Column(String(20), nullable=False)    # int, dint, real, bool, etc.
@@ -73,14 +82,16 @@ class Tag(Base):
 
     # Индекс для поиска (без unique, т.к. AB теги не имеют db_number/start_address)
     __table_args__ = (
-        Index("ix_tag_plc_address_bit", "plc_id", "db_number", "start_address", "bit_number"),
+        Index("ix_tag_plc_area_address", "plc_id", "memory_area", "db_number", "start_address", "bit_number"),
         Index("ix_tag_plc_ab_tag", "plc_id", "ab_tag_name"),
     )
 
     def __repr__(self):
         if self.ab_tag_name:
             return f"<Tag {self.name} (AB: {self.ab_tag_name})>"
-        return f"<Tag {self.name} (DB{self.db_number}.DBW{self.start_address})>"
+        if self.memory_area == "DB":
+            return f"<Tag {self.name} (DB{self.db_number}.{self.start_address})>"
+        return f"<Tag {self.name} ({self.memory_area}{self.start_address})>"
 
 
 class TrendData(Base):

@@ -136,8 +136,11 @@ class PLCConnection:
     
     def _read_s7_tag(self, tag: Tag) -> Optional[Any]:
         """Чтение тега Siemens S7"""
-        return self.client.read_db(
-            db_number=tag.db_number,
+        memory_area = getattr(tag, 'memory_area', None) or "DB"
+        
+        return self.client.read_area(
+            area=memory_area,
+            db_number=tag.db_number or 0,
             start=tag.start_address,
             size=tag.data_size,
             type_data=tag.data_type,

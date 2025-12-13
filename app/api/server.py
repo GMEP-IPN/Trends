@@ -63,6 +63,7 @@ class TagResponse(BaseModel):
     name: str
     description: Optional[str]
     # Siemens S7 addressing (nullable for AB)
+    memory_area: str = "DB"  # DB, I, Q, M
     db_number: Optional[int] = None
     start_address: Optional[int] = None
     bit_number: int = 0
@@ -120,6 +121,7 @@ class TagCreateRequest(BaseModel):
     name: str
     description: Optional[str] = ""
     # Siemens S7 addressing (optional for AB)
+    memory_area: str = "DB"  # DB, I, Q, M (область памяти S7)
     db_number: Optional[int] = None
     start_address: Optional[int] = None
     bit_number: int = 0  # Номер бита (0-7, только для BOOL)
@@ -138,6 +140,14 @@ class TagCreateRequest(BaseModel):
             raise ValueError('Tag name cannot be empty')
         if len(v) > 100:
             raise ValueError('Tag name too long (max 100 characters)')
+        return v
+    
+    @field_validator('memory_area')
+    @classmethod
+    def validate_memory_area(cls, v: str) -> str:
+        v = v.upper().strip()
+        if v not in ['DB', 'I', 'Q', 'M']:
+            raise ValueError('Memory area must be one of: DB, I, Q, M')
         return v
     
     @field_validator('db_number')
@@ -198,6 +208,7 @@ class TagUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     # Siemens S7 addressing
+    memory_area: Optional[str] = None  # DB, I, Q, M
     db_number: Optional[int] = None
     start_address: Optional[int] = None
     bit_number: Optional[int] = None
@@ -215,6 +226,15 @@ class TagUpdateRequest(BaseModel):
                 raise ValueError('Tag name cannot be empty')
             if len(v) > 100:
                 raise ValueError('Tag name too long (max 100 characters)')
+        return v
+    
+    @field_validator('memory_area')
+    @classmethod
+    def validate_memory_area(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v = v.upper().strip()
+            if v not in ['DB', 'I', 'Q', 'M']:
+                raise ValueError('Memory area must be one of: DB, I, Q, M')
         return v
     
     @field_validator('db_number')
@@ -585,6 +605,7 @@ async def list_tags(plc_id: Optional[int] = None):
                 id=tag.id,
                 name=tag.name,
                 description=tag.description,
+                memory_area=getattr(tag, 'memory_area', None) or "DB",
                 db_number=tag.db_number,
                 start_address=tag.start_address,
                 bit_number=tag.bit_number or 0,
@@ -717,22 +738,38 @@ async def create_tag(request: TagCreateRequest):
             
             address_str = request.ab_tag_name
         else:
-            # Для Siemens S7 требуются DB и адрес
-            if request.db_number is None or request.start_address is None:
-                raise HTTPException(status_code=400, detail="DB number and start address are required for Siemens S7 PLC")
+            # Для Siemens S7 требуется адрес
+            memory_area = request.memory_area or "DB"
+            
+            # Для DB требуется db_number, для I/Q/M - нет
+            if memory_area == "DB":
+                if request.db_number is None or request.start_address is None:
+                    raise HTTPException(status_code=400, detail="DB number and start address are required for DB area")
+            else:
+                if request.start_address is None:
+                    raise HTTPException(status_code=400, detail="Start address is required for Siemens S7 PLC")
             
             # Проверяем уникальность адреса S7
             query = session.query(Tag).filter(
                 Tag.plc_id == plc.id,
-                Tag.db_number == request.db_number,
+                Tag.memory_area == memory_area,
                 Tag.start_address == request.start_address
             )
             
+            if memory_area == "DB":
+                query = query.filter(Tag.db_number == request.db_number)
+            
             if request.data_type == 'bool':
                 query = query.filter(Tag.bit_number == request.bit_number)
-                address_str = f"DB{request.db_number}.DBX{request.start_address}.{request.bit_number}"
+                if memory_area == "DB":
+                    address_str = f"DB{request.db_number}.DBX{request.start_address}.{request.bit_number}"
+                else:
+                    address_str = f"{memory_area}{request.start_address}.{request.bit_number}"
             else:
-                address_str = f"DB{request.db_number}.{request.start_address}"
+                if memory_area == "DB":
+                    address_str = f"DB{request.db_number}.{request.start_address}"
+                else:
+                    address_str = f"{memory_area}{request.start_address}"
             
             existing = query.first()
             
@@ -746,6 +783,7 @@ async def create_tag(request: TagCreateRequest):
         if existing and not existing.is_active:
             existing.name = request.name
             existing.description = request.description
+            existing.memory_area = request.memory_area or "DB"
             existing.bit_number = request.bit_number if request.data_type == 'bool' else 0
             existing.data_type = request.data_type
             existing.data_size = get_data_size(request.data_type)
@@ -766,11 +804,12 @@ async def create_tag(request: TagCreateRequest):
             plc_id=plc.id,
             name=request.name,
             description=request.description,
-            db_number=request.db_number,
+            memory_area=request.memory_area or "DB",
+            db_number=request.db_number if request.memory_area == "DB" else None,
             start_address=request.start_address,
             bit_number=request.bit_number if request.data_type == 'bool' else 0,
             data_type=request.data_type,
-            data_size=get_data_size(request.data_type) if request.db_number else None,
+            data_size=get_data_size(request.data_type) if request.start_address is not None else None,
             ab_tag_name=request.ab_tag_name,
             poll_interval_ms=request.poll_interval_ms,
             is_active=True
@@ -812,6 +851,12 @@ async def update_tag(tag_id: int, request: TagUpdateRequest):
         
         # Поля для Siemens S7
         if plc_type == PLC_TYPE_SIEMENS_S7:
+            if request.memory_area is not None:
+                tag.memory_area = request.memory_area
+                # Если меняем на не-DB область, обнуляем db_number
+                if request.memory_area != "DB":
+                    tag.db_number = None
+            
             if request.db_number is not None:
                 tag.db_number = request.db_number
             

@@ -40,6 +40,13 @@ def _run_migrations():
             conn.commit()
         logger.info("Migration: added 'bit_number' column to tags table")
     
+    # Миграция: добавление memory_area если отсутствует
+    if 'memory_area' not in columns:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE tags ADD COLUMN memory_area VARCHAR(10) DEFAULT 'DB'"))
+            conn.commit()
+        logger.info("Migration: added 'memory_area' column to tags table")
+    
     # Миграция: обновление уникального индекса для включения bit_number
     indexes = inspector.get_indexes('tags')
     index_names = [idx['name'] for idx in indexes]

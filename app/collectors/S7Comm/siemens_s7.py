@@ -7,10 +7,19 @@ from snap7.util import (
     get_bool, get_int, get_dint, get_real,
     get_word, get_dword, get_string
 )
+from snap7.type import Areas
 from time import sleep
 from typing import Optional, Any
 
 logger = logging.getLogger('trends')
+
+# Маппинг областей памяти
+MEMORY_AREAS = {
+    "DB": Areas.DB,   # Data Blocks (0x84)
+    "I": Areas.PE,    # Process Inputs (0x81)
+    "Q": Areas.PA,    # Process Outputs (0x82)
+    "M": Areas.MK,    # Markers (0x83)
+}
 
 # Snap7 exception - may vary between versions
 try:
@@ -218,6 +227,65 @@ class PLC:
             logger.error(f"Unexpected read error (DB{db_number}.{start}): {e}")
             self.connected = False
             raise PLCReadError(f"Unexpected error reading DB{db_number}.{start}: {e}")
+
+    def read_area(self, area: str, db_number: int, start: int, size: int, type_data: str, bit_number: int = 0) -> Any:
+        """
+        Чтение данных из любой области памяти S7.
+        
+        Args:
+            area: Область памяти (DB, I, Q, M)
+            db_number: Номер DB (только для DB, для остальных игнорируется)
+            start: Начальный адрес (байт)
+            size: Размер данных (байт)
+            type_data: Тип данных (int, dint, real, word, dword, bool, string)
+            bit_number: Номер бита (0-7, только для bool)
+            
+        Returns:
+            Значение указанного типа
+        """
+        # Для DB используем оптимизированный db_read
+        if area == "DB":
+            return self.read_db(db_number, start, size, type_data, bit_number)
+        
+        if area not in MEMORY_AREAS:
+            raise ValueError(f"Unsupported memory area: {area}. Supported: {list(MEMORY_AREAS.keys())}")
+        
+        if type_data not in self.parsers:
+            raise ValueError(f"Unsupported data type: {type_data}. Supported: {list(self.parsers.keys())}")
+
+        try:
+            self.ensure_connection()
+        except PLCConnectionError as e:
+            raise PLCReadError(f"Cannot read {area}{start}: {e}")
+
+        area_code = MEMORY_AREAS[area]
+        addr_str = f"{area}{start}" + (f".{bit_number}" if type_data == "bool" else "")
+
+        try:
+            # Для I/Q/M db_number = 0
+            raw = self.client.read_area(area_code, 0, start, size)
+            if type_data == "bool":
+                return get_bool(raw, 0, bit_number)
+            return self.parsers[type_data](raw)
+
+        except (Snap7Exception, RuntimeError) as e:
+            logger.warning(f"Read failed ({addr_str}): {e}")
+
+            # Вторая попытка после переподключения
+            try:
+                self.ensure_connection(timeout_attempts=3)
+                raw = self.client.read_area(area_code, 0, start, size)
+                if type_data == "bool":
+                    return get_bool(raw, 0, bit_number)
+                return self.parsers[type_data](raw)
+            except (PLCConnectionError, Snap7Exception, RuntimeError) as retry_err:
+                self.connected = False
+                raise PLCReadError(f"Failed to read {addr_str} after retry: {retry_err}")
+        
+        except Exception as e:
+            logger.error(f"Unexpected read error ({addr_str}): {e}")
+            self.connected = False
+            raise PLCReadError(f"Unexpected error reading {addr_str}: {e}")
 
 
 if __name__ == "__main__":

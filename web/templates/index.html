@@ -181,7 +181,7 @@
         /* Main Layout */
         .main {
             display: grid;
-            grid-template-columns: 280px 1fr;
+            grid-template-columns: 320px 1fr;
             min-height: calc(100vh - 69px);
         }
         
@@ -189,7 +189,7 @@
         .sidebar {
             background: var(--bg-secondary);
             border-right: 1px solid var(--border);
-            padding: 1.5rem;
+            padding: 1rem 0.75rem;
             overflow-y: auto;
         }
         
@@ -203,7 +203,6 @@
         .sidebar-title {
             font-size: 0.75rem;
             font-weight: 600;
-            text-transform: uppercase;
             letter-spacing: 0.05em;
             color: var(--text-muted);
         }
@@ -253,8 +252,8 @@
         .plc-selector {
             display: flex;
             flex-direction: column;
-            gap: 0.25rem;
-            margin-bottom: 0.5rem;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
         }
         
         .plc-btn {
@@ -355,10 +354,9 @@
             padding: 0.5rem 0.75rem;
             cursor: pointer;
             transition: all 0.2s;
-            position: relative;
             display: flex;
             align-items: center;
-            gap: 0.75rem;
+            gap: 0.5rem;
         }
         
         .tag-item:hover {
@@ -372,14 +370,15 @@
             flex: 1;
             min-width: 0;
             cursor: pointer;
+            overflow: hidden;
         }
         
         .tag-name {
             font-weight: 500;
-            font-size: 0.875rem;
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         
         .tag-color-dot {
@@ -399,58 +398,51 @@
         
         .tag-value {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 1rem;
+            font-size: 0.85rem;
             font-weight: 600;
             color: var(--accent);
-            text-align: right;
-            min-width: 70px;
-            margin-right: 1.5rem;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
         
         .tag-meta {
             font-size: 0.65rem;
             color: var(--text-muted);
+            margin-top: 1px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         
-        .tag-delete, .tag-edit {
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 20px;
-            height: 20px;
-            border: none;
-            border-radius: 4px;
-            color: white;
-            cursor: pointer;
-            opacity: 0;
-            transition: all 0.2s;
-            font-size: 0.75rem;
+        .tag-actions {
+            display: none;
+            gap: 0.25rem;
+            margin-left: auto;
+        }
+        
+        .tag-item:hover .tag-actions {
             display: flex;
-            align-items: center;
-            justify-content: center;
         }
         
-        .tag-delete {
-            right: 0.5rem;
-            background: var(--danger);
+        .tag-action-btn {
+            width: 22px;
+            height: 22px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            opacity: 0.6;
+            transition: all 0.15s;
         }
         
-        .tag-edit {
-            right: 1.75rem;
-            background: var(--accent-secondary);
-        }
-        
-        .tag-item:hover .tag-delete,
-        .tag-item:hover .tag-edit {
+        .tag-action-btn:hover {
             opacity: 1;
+            background: var(--bg-hover);
         }
         
-        .tag-delete:hover {
-            background: #dc2626;
-        }
-        
-        .tag-edit:hover {
-            background: #6d28d9;
+        .tag-action-btn.delete:hover {
+            background: rgba(239, 68, 68, 0.2);
         }
         
         /* Content */
@@ -540,7 +532,7 @@
         }
         
         .chart-wrapper {
-            height: 400px;
+            height: 500px;
             position: relative;
         }
         
@@ -1158,7 +1150,7 @@
             
             <!-- Tags -->
             <div class="sidebar-header" style="margin-top: 1rem;">
-                <div class="sidebar-title">Tags</div>
+                <div class="sidebar-title">TAGs</div>
                 <button class="add-btn" onclick="openModal()" title="Add tag">+</button>
             </div>
             <div class="tag-list" id="tagList">
@@ -1243,13 +1235,22 @@
                 <div id="s7TagFields">
                     <div class="form-row">
                         <div class="form-group">
+                            <label class="form-label">Memory Area</label>
+                            <select class="form-input" id="tagMemoryArea" onchange="updateMemoryAreaUI()">
+                                <option value="DB">DB (Data Block)</option>
+                                <option value="I">I (Inputs)</option>
+                                <option value="Q">Q (Outputs)</option>
+                                <option value="M">M (Markers)</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="dbNumberGroup">
                             <label class="form-label">DB Number</label>
                             <input type="number" class="form-input" id="tagDbNumber" placeholder="1" min="1">
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">Address (byte)</label>
-                            <input type="number" class="form-input" id="tagAddress" placeholder="0" min="0">
-                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Address (byte)</label>
+                        <input type="number" class="form-input" id="tagAddress" placeholder="0" min="0">
                     </div>
                     
                     <div class="form-group" id="bitNumberGroup" style="display: none;">
@@ -1290,8 +1291,6 @@
                         </select>
                     </div>
                 </div>
-                
-                <input type="hidden" id="tagDataSize" value="4">
                 
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -1413,11 +1412,24 @@
                 return tag.ab_tag_name;
             }
             // Siemens S7
-            if (tag.db_number !== null && tag.db_number !== undefined) {
-                if (tag.data_type === 'bool') {
-                    return `DB${tag.db_number}.DBX${tag.start_address}.${tag.bit_number || 0}`;
+            const memoryArea = tag.memory_area || 'DB';
+            
+            if (memoryArea === 'DB') {
+                if (tag.db_number !== null && tag.db_number !== undefined) {
+                    if (tag.data_type === 'bool') {
+                        return `DB${tag.db_number}.DBX${tag.start_address}.${tag.bit_number || 0}`;
+                    }
+                    return `DB${tag.db_number}.${tag.data_type.toUpperCase()}${tag.start_address}`;
                 }
-                return `DB${tag.db_number}.${tag.data_type.toUpperCase()}${tag.start_address}`;
+            } else {
+                // I, Q, M areas
+                if (tag.start_address !== null && tag.start_address !== undefined) {
+                    if (tag.data_type === 'bool') {
+                        return `${memoryArea}${tag.start_address}.${tag.bit_number || 0}`;
+                    }
+                    const typePrefix = {'int': 'W', 'word': 'W', 'dint': 'D', 'dword': 'D', 'real': 'D'}[tag.data_type] || '';
+                    return `${memoryArea}${typePrefix}${tag.start_address}`;
+                }
             }
             return 'N/A';
         }
@@ -1652,8 +1664,6 @@
                     const tagJson = JSON.stringify(tag).replace(/'/g, "\\'").replace(/"/g, '&quot;');
                     return `
                     <div class="tag-item" data-id="${tag.id}">
-                        <button class="tag-delete" onclick="deleteTag(event, ${tag.id}, '${tag.name}')" title="Delete">×</button>
-                        <button class="tag-edit" onclick="event.stopPropagation(); editTag(${tag.id})" title="Edit">✏️</button>
                         <input type="checkbox" class="tag-checkbox" 
                                ${isVisible ? 'checked' : ''} 
                                onclick="event.stopPropagation(); toggleTagVisibility(${tag.id})"
@@ -1664,6 +1674,10 @@
                             <div class="tag-meta">${formatTagAddress(tag)}</div>
                         </div>
                         <div class="tag-value" style="opacity: ${isVisible ? 1 : 0.5}">${tag.latest_value !== null ? tag.latest_value.toFixed(2) : '--'}</div>
+                        <div class="tag-actions">
+                            <button class="tag-action-btn" onclick="event.stopPropagation(); editTag(${tag.id})" title="Edit">✏️</button>
+                            <button class="tag-action-btn delete" onclick="deleteTag(event, ${tag.id}, '${tag.name}')" title="Delete">🗑️</button>
+                        </div>
                     </div>
                 `}).join('');
                 
@@ -1959,6 +1973,20 @@
             document.getElementById('tagFormTitle').textContent = '➕ Add Tag';
             document.getElementById('tagSubmitBtn').textContent = 'Add';
             document.getElementById('bitNumberGroup').style.display = 'none';
+            document.getElementById('tagMemoryArea').value = 'DB';
+            updateMemoryAreaUI();
+        }
+        
+        // Update UI based on selected memory area (DB shows DB Number, I/Q/M don't)
+        function updateMemoryAreaUI() {
+            const memoryArea = document.getElementById('tagMemoryArea').value;
+            const dbNumberGroup = document.getElementById('dbNumberGroup');
+            
+            if (memoryArea === 'DB') {
+                dbNumberGroup.style.display = 'block';
+            } else {
+                dbNumberGroup.style.display = 'none';
+            }
         }
         
         // Edit tag - загружает данные тега в форму
@@ -1985,11 +2013,17 @@
                 document.getElementById('tagPollInterval').value = tag.poll_interval_ms;
                 
                 // Siemens S7 поля
-                if (tag.db_number !== null && tag.db_number !== undefined) {
+                const memoryArea = tag.memory_area || 'DB';
+                document.getElementById('tagMemoryArea').value = memoryArea;
+                updateMemoryAreaUI();
+                
+                if (memoryArea === 'DB' && tag.db_number !== null && tag.db_number !== undefined) {
                     document.getElementById('tagDbNumber').value = tag.db_number;
-                    document.getElementById('tagAddress').value = tag.start_address;
-                    document.getElementById('tagBitNumber').value = tag.bit_number || 0;
                 }
+                if (tag.start_address !== null && tag.start_address !== undefined) {
+                    document.getElementById('tagAddress').value = tag.start_address;
+                }
+                document.getElementById('tagBitNumber').value = tag.bit_number || 0;
                 
                 // Allen-Bradley поля
                 if (tag.ab_tag_name) {
@@ -2009,11 +2043,8 @@
         }
         
         function updateDataSize() {
-            const select = document.getElementById('tagDataType');
-            const size = select.options[select.selectedIndex].dataset.size;
-            document.getElementById('tagDataSize').value = size;
-            
             // Show/hide bit number field for BOOL type
+            const select = document.getElementById('tagDataType');
             const bitGroup = document.getElementById('bitNumberGroup');
             if (select.value === 'bool') {
                 bitGroup.style.display = 'block';
@@ -2055,18 +2086,25 @@
                     return;
                 }
             } else {
+                const memoryArea = document.getElementById('tagMemoryArea').value;
                 const dbNumber = document.getElementById('tagDbNumber').value;
                 const startAddress = document.getElementById('tagAddress').value;
                 
-                if (dbNumber) data.db_number = parseInt(dbNumber);
+                data.memory_area = memoryArea;
+                if (memoryArea === 'DB' && dbNumber) {
+                    data.db_number = parseInt(dbNumber);
+                }
                 if (startAddress !== '') data.start_address = parseInt(startAddress);
                 data.bit_number = parseInt(document.getElementById('tagBitNumber').value) || 0;
                 
                 if (!isEditMode) {
-                    data.data_size = parseInt(document.getElementById('tagDataSize').value);
-                    
-                    if (!data.db_number || isNaN(data.start_address)) {
-                        showToast('Please enter DB number and address', 'error');
+                    // Data size определяется автоматически по типу на сервере
+                    if (memoryArea === 'DB' && !data.db_number) {
+                        showToast('Please enter DB number', 'error');
+                        return;
+                    }
+                    if (isNaN(data.start_address)) {
+                        showToast('Please enter address', 'error');
                         return;
                     }
                 }
