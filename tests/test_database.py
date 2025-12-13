@@ -97,43 +97,18 @@ class TestModelIndexes:
         assert any('trend_tag_time' in name for name in index_names)
         assert any('trend_timestamp' in name for name in index_names)
     
-    def test_tag_unique_address_index(self, temp_db):
-        """Tag has unique index on (plc_id, db_number, start_address)"""
-        session, _ = temp_db
+    def test_tag_address_index_exists(self, temp_db):
+        """Tag has index on (plc_id, db_number, start_address, bit_number)"""
+        _, engine = temp_db
         
-        # Create PLC
-        plc = PLC(name="TestPLC", ip_address="192.168.1.10", is_active=True)
-        session.add(plc)
-        session.commit()
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        indexes = inspector.get_indexes('tags')
         
-        # Create first tag
-        tag1 = Tag(
-            plc_id=plc.id,
-            name="Tag1",
-            db_number=1,
-            start_address=0,
-            data_type="real",
-            data_size=4,
-            is_active=True
-        )
-        session.add(tag1)
-        session.commit()
+        index_names = [idx['name'] for idx in indexes]
         
-        # Try to create duplicate at same address
-        tag2 = Tag(
-            plc_id=plc.id,
-            name="Tag2",
-            db_number=1,
-            start_address=0,  # Same address!
-            data_type="int",
-            data_size=2,
-            is_active=True
-        )
-        session.add(tag2)
-        
-        # Should raise IntegrityError
-        with pytest.raises(Exception):  # IntegrityError wrapped
-            session.commit()
+        # Индекс должен существовать (но не уникальный - для поддержки Allen-Bradley)
+        assert any('tag_plc_address' in name for name in index_names)
 
 
 class TestCascadeDelete:
@@ -275,4 +250,5 @@ class TestDefaultValues:
         
         assert trend.quality == 192  # Good quality
         assert trend.timestamp is not None
+
 

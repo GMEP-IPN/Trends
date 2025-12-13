@@ -140,23 +140,37 @@
             animation: none;
         }
         
-        /* Connection Banner */
-        .connection-banner {
-            background: linear-gradient(135deg, var(--danger), #991b1b);
-            padding: 0.75rem 2rem;
-            text-align: center;
-            font-size: 0.875rem;
-            display: none;
-        }
-        
-        .connection-banner.show {
-            display: block;
-        }
-        
-        .connection-banner a {
+        /* Header Warning */
+        .header-warning {
+            background: var(--danger);
             color: white;
-            text-decoration: underline;
-            margin-left: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-left: 1rem;
+            display: none;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .header-warning.show {
+            display: inline-flex;
+        }
+        
+        .header-warning button {
+            background: rgba(255,255,255,0.9);
+            color: var(--danger);
+            border: none;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        
+        .header-warning button:hover {
+            background: white;
         }
         
         @keyframes pulse {
@@ -352,10 +366,7 @@
             border-color: var(--accent-dim);
         }
         
-        .tag-item.active {
-            border-color: var(--accent);
-            box-shadow: 0 0 10px var(--accent-dim);
-        }
+        /* Removed: .tag-item.active border - not needed */
         
         .tag-info {
             flex: 1;
@@ -401,14 +412,12 @@
             color: var(--text-muted);
         }
         
-        .tag-delete {
+        .tag-delete, .tag-edit {
             position: absolute;
             top: 50%;
-            right: 0.5rem;
             transform: translateY(-50%);
             width: 20px;
             height: 20px;
-            background: var(--danger);
             border: none;
             border-radius: 4px;
             color: white;
@@ -421,7 +430,18 @@
             justify-content: center;
         }
         
-        .tag-item:hover .tag-delete {
+        .tag-delete {
+            right: 0.5rem;
+            background: var(--danger);
+        }
+        
+        .tag-edit {
+            right: 1.75rem;
+            background: var(--accent-secondary);
+        }
+        
+        .tag-item:hover .tag-delete,
+        .tag-item:hover .tag-edit {
             opacity: 1;
         }
         
@@ -429,9 +449,13 @@
             background: #dc2626;
         }
         
+        .tag-edit:hover {
+            background: #6d28d9;
+        }
+        
         /* Content */
         .content {
-            padding: 2rem;
+            padding: 0.5rem;
             overflow-y: auto;
         }
         
@@ -439,8 +463,8 @@
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 1rem;
-            margin-bottom: 2rem;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
         }
         
         .stat-card {
@@ -471,9 +495,9 @@
         .chart-container {
             background: var(--bg-card);
             border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
+            border-radius: 10px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
         }
         
         .chart-header {
@@ -920,9 +944,9 @@
         .stats-card {
             background: var(--bg-card);
             border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
+            border-radius: 10px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
         }
         
         .stats-card-header {
@@ -1104,15 +1128,11 @@
         </div>
     </div>
 
-    <!-- Connection Banner -->
-    <div class="connection-banner" id="connectionBanner">
-        ⚠️ <span id="bannerText">No PLC connection</span>
-    </div>
-    
     <header class="header">
         <div class="logo">
             <span class="logo-text">Trends</span>
             <span class="version-badge" id="versionBadge"></span>
+            <span class="header-warning" id="connectionBanner"><span id="bannerText"></span></span>
         </div>
         <div style="display: flex; align-items: center; gap: 1rem;">
             <div class="status-badge">
@@ -1158,6 +1178,7 @@
                         <div class="time-selector">
                             <button class="time-btn" data-minutes="5">5м</button>
                             <button class="time-btn active" data-minutes="15">15м</button>
+                            <button class="time-btn" data-minutes="30">30м</button>
                             <button class="time-btn" data-minutes="60">1ч</button>
                         </div>
                         <div class="chart-controls">
@@ -1198,15 +1219,16 @@
         </section>
     </main>
     
-    <!-- Add Tag Modal -->
+    <!-- Add/Edit Tag Modal -->
     <div class="modal-overlay" id="modalOverlay">
         <div class="modal">
             <div class="modal-header">
-                <h3 class="modal-title">➕ Add Tag</h3>
+                <h3 class="modal-title" id="tagFormTitle">➕ Add Tag</h3>
                 <button class="modal-close" onclick="closeModal()">×</button>
             </div>
             
             <form id="tagForm" onsubmit="submitTag(event)">
+                <input type="hidden" id="tagEditId" value="">
                 <div class="form-group">
                     <label class="form-label">Tag Name</label>
                     <input type="text" class="form-input" id="tagName" placeholder="Temperature" required>
@@ -1273,7 +1295,7 @@
                 
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Add</button>
+                    <button type="submit" class="btn btn-primary" id="tagSubmitBtn">Add</button>
                 </div>
             </form>
         </div>
@@ -1363,6 +1385,26 @@
         let tagsData = [];  // Store tag data for statistics
         let visibleTagIds = new Set();  // Tags visible on chart
         let plcsData = [];  // Store PLC data
+        
+        // Save visible tags to localStorage
+        function saveVisibleTags() {
+            localStorage.setItem('visibleTagIds', JSON.stringify([...visibleTagIds]));
+        }
+        
+        // Load visible tags from localStorage
+        function loadVisibleTags() {
+            const saved = localStorage.getItem('visibleTagIds');
+            if (saved) {
+                try {
+                    const ids = JSON.parse(saved);
+                    visibleTagIds = new Set(ids);
+                    return true;  // Had saved state
+                } catch (e) {
+                    console.error('Error loading saved tags:', e);
+                }
+            }
+            return false;  // No saved state
+        }
         
         // Format tag address (S7 or AB)
         function formatTagAddress(tag) {
@@ -1607,10 +1649,11 @@
                 tagList.innerHTML = tags.map((tag, index) => {
                     const color = chartColors[index % chartColors.length];
                     const isVisible = visibleTagIds.has(tag.id);
+                    const tagJson = JSON.stringify(tag).replace(/'/g, "\\'").replace(/"/g, '&quot;');
                     return `
-                    <div class="tag-item ${selectedTagId === tag.id ? 'active' : ''}" 
-                         data-id="${tag.id}">
+                    <div class="tag-item" data-id="${tag.id}">
                         <button class="tag-delete" onclick="deleteTag(event, ${tag.id}, '${tag.name}')" title="Delete">×</button>
+                        <button class="tag-edit" onclick="event.stopPropagation(); editTag(${tag.id})" title="Edit">✏️</button>
                         <input type="checkbox" class="tag-checkbox" 
                                ${isVisible ? 'checked' : ''} 
                                onclick="event.stopPropagation(); toggleTagVisibility(${tag.id})"
@@ -1624,25 +1667,34 @@
                     </div>
                 `}).join('');
                 
-                // Auto-select first tag for statistics
+                // Auto-select first tag for statistics (without visual highlight)
                 if (tags.length > 0 && !selectedTagId) {
                     selectedTagId = tags[0].id;
-                    document.querySelector('.tag-item')?.classList.add('active');
-                }
-                
-                // Initialize visible tags (all visible by default for new tags)
-                tags.forEach(tag => {
-                    if (!visibleTagIds.has(tag.id) && visibleTagIds.size === 0) {
-                        // First load - make all visible
-                        visibleTagIds.add(tag.id);
-                    }
-                });
-                // If still empty, add all
-                if (visibleTagIds.size === 0) {
-                    tags.forEach(tag => visibleTagIds.add(tag.id));
                 }
             } catch (error) {
                 console.error('Error loading tags:', error);
+            }
+        }
+        
+        // Update only tag values without re-rendering the list (prevents hover flicker)
+        async function updateTagValues() {
+            try {
+                const url = selectedPlcId ? `/api/tags?plc_id=${selectedPlcId}` : '/api/tags';
+                const response = await fetch(url);
+                if (!response.ok) return;
+                const tags = await response.json();
+                
+                tags.forEach(tag => {
+                    const tagItem = document.querySelector(`.tag-item[data-id="${tag.id}"]`);
+                    if (tagItem) {
+                        const valueEl = tagItem.querySelector('.tag-value');
+                        if (valueEl) {
+                            valueEl.textContent = tag.latest_value !== null ? tag.latest_value.toFixed(2) : '--';
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Error updating tag values:', error);
             }
         }
         
@@ -1654,8 +1706,22 @@
                 visibleTagIds.add(tagId);
             }
             
-            // Reload tags to update UI
-            await loadTags();
+            // Save to localStorage
+            saveVisibleTags();
+            
+            // Update visual state without re-rendering the list
+            const tagItem = document.querySelector(`.tag-item[data-id="${tagId}"]`);
+            if (tagItem) {
+                const checkbox = tagItem.querySelector('.tag-checkbox');
+                const colorDot = tagItem.querySelector('.tag-color-dot');
+                const valueEl = tagItem.querySelector('.tag-value');
+                const isVisible = visibleTagIds.has(tagId);
+                
+                if (checkbox) checkbox.checked = isVisible;
+                if (colorDot) colorDot.style.opacity = isVisible ? 1 : 0.3;
+                if (valueEl) valueEl.style.opacity = isVisible ? 1 : 0.5;
+            }
+            
             // Reload chart with new selection
             await loadTrendData();
         }
@@ -1667,7 +1733,8 @@
             if (response.ok) {
                 const tags = await response.json();
                 tags.forEach(tag => visibleTagIds.add(tag.id));
-                await loadTags();
+                saveVisibleTags();
+                updateTagCheckboxes();
                 await loadTrendData();
             }
         }
@@ -1675,19 +1742,29 @@
         // Deselect all tags
         async function deselectAllTags() {
             visibleTagIds.clear();
-            await loadTags();
+            saveVisibleTags();
+            updateTagCheckboxes();
             await loadTrendData();
+        }
+        
+        // Update all tag checkboxes visual state
+        function updateTagCheckboxes() {
+            document.querySelectorAll('.tag-item').forEach(tagItem => {
+                const tagId = parseInt(tagItem.dataset.id);
+                const checkbox = tagItem.querySelector('.tag-checkbox');
+                const colorDot = tagItem.querySelector('.tag-color-dot');
+                const valueEl = tagItem.querySelector('.tag-value');
+                const isVisible = visibleTagIds.has(tagId);
+                
+                if (checkbox) checkbox.checked = isVisible;
+                if (colorDot) colorDot.style.opacity = isVisible ? 1 : 0.3;
+                if (valueEl) valueEl.style.opacity = isVisible ? 1 : 0.5;
+            });
         }
         
         // Select tag (для подсветки в sidebar, статистика по выбранному)
         async function selectTag(tagId, tagName) {
             selectedTagId = tagId;
-            
-            // Update UI
-            document.querySelectorAll('.tag-item').forEach(el => {
-                el.classList.toggle('active', parseInt(el.dataset.id) === tagId);
-            });
-            
             // Загружаем статистику для выбранного тега
             await loadStatistics();
         }
@@ -1701,7 +1778,7 @@
             if (updateInterval) clearInterval(updateInterval);
             updateInterval = setInterval(() => {
                 loadStatistics();      // Update statistics
-                loadTags();            // Update current values in sidebar
+                updateTagValues();     // Update current values in sidebar (without re-render)
                 updateLiveTrendData(); // Add new data points to chart
             }, 1000);
         }
@@ -1818,7 +1895,7 @@
                 }
                 
                 // Update period text
-                const periodText = {5: '5 min', 15: '15 min', 60: '1 hour'};
+                const periodText = {5: '5 min', 15: '15 min', 30: '30 min', 60: '1 hour'};
                 document.getElementById('statsPeriod').textContent = `last ${periodText[selectedMinutes] || selectedMinutes + ' min'}`;
                 
                 // Загружаем статистику для каждого тега
@@ -1867,8 +1944,10 @@
         });
         
         // Modal functions
-        function openModal() {
+        function openModal(editMode = false) {
             document.getElementById('modalOverlay').classList.add('active');
+            document.getElementById('tagFormTitle').textContent = editMode ? '✏️ Edit Tag' : '➕ Add Tag';
+            document.getElementById('tagSubmitBtn').textContent = editMode ? 'Save' : 'Add';
             updateTagFormFields();  // Show correct fields based on PLC type
             document.getElementById('tagName').focus();
         }
@@ -1876,7 +1955,57 @@
         function closeModal() {
             document.getElementById('modalOverlay').classList.remove('active');
             document.getElementById('tagForm').reset();
+            document.getElementById('tagEditId').value = '';
+            document.getElementById('tagFormTitle').textContent = '➕ Add Tag';
+            document.getElementById('tagSubmitBtn').textContent = 'Add';
             document.getElementById('bitNumberGroup').style.display = 'none';
+        }
+        
+        // Edit tag - загружает данные тега в форму
+        async function editTag(tagId) {
+            try {
+                // Получаем список тегов и находим нужный
+                const url = selectedPlcId ? `/api/tags?plc_id=${selectedPlcId}` : '/api/tags';
+                const response = await fetch(url);
+                if (!response.ok) return;
+                
+                const tags = await response.json();
+                const tag = tags.find(t => t.id === tagId);
+                
+                if (!tag) {
+                    showToast('Tag not found', 'error');
+                    return;
+                }
+                
+                // Заполняем форму данными тега
+                document.getElementById('tagEditId').value = tag.id;
+                document.getElementById('tagName').value = tag.name;
+                document.getElementById('tagDescription').value = tag.description || '';
+                document.getElementById('tagDataType').value = tag.data_type;
+                document.getElementById('tagPollInterval').value = tag.poll_interval_ms;
+                
+                // Siemens S7 поля
+                if (tag.db_number !== null && tag.db_number !== undefined) {
+                    document.getElementById('tagDbNumber').value = tag.db_number;
+                    document.getElementById('tagAddress').value = tag.start_address;
+                    document.getElementById('tagBitNumber').value = tag.bit_number || 0;
+                }
+                
+                // Allen-Bradley поля
+                if (tag.ab_tag_name) {
+                    document.getElementById('tagABName').value = tag.ab_tag_name;
+                }
+                
+                // Показываем bit_number для bool
+                updateDataSize();
+                
+                // Открываем модальное окно в режиме редактирования
+                openModal(true);
+                
+            } catch (error) {
+                console.error('Error loading tag:', error);
+                showToast('Error loading tag', 'error');
+            }
         }
         
         function updateDataSize() {
@@ -1894,60 +2023,88 @@
             }
         }
         
-        // Submit tag
+        // Submit tag (create or update)
         async function submitTag(event) {
             event.preventDefault();
             
-            if (!selectedPlcId) {
+            const editId = document.getElementById('tagEditId').value;
+            const isEditMode = !!editId;
+            
+            if (!selectedPlcId && !isEditMode) {
                 showToast('Please select a PLC first', 'error');
                 return;
             }
             
             const data = {
-                plc_id: selectedPlcId,
                 name: document.getElementById('tagName').value,
                 description: document.getElementById('tagDescription').value,
                 data_type: document.getElementById('tagDataType').value,
                 poll_interval_ms: parseInt(document.getElementById('tagPollInterval').value)
             };
             
+            // Add plc_id only for new tags
+            if (!isEditMode) {
+                data.plc_id = selectedPlcId;
+            }
+            
             // Add fields based on PLC type
             if (selectedPlcType === 'allen_bradley') {
                 data.ab_tag_name = document.getElementById('tagABName').value;
-                if (!data.ab_tag_name) {
+                if (!data.ab_tag_name && !isEditMode) {
                     showToast('Please enter AB tag name', 'error');
                     return;
                 }
             } else {
-                data.db_number = parseInt(document.getElementById('tagDbNumber').value);
-                data.start_address = parseInt(document.getElementById('tagAddress').value);
-                data.bit_number = parseInt(document.getElementById('tagBitNumber').value) || 0;
-                data.data_size = parseInt(document.getElementById('tagDataSize').value);
+                const dbNumber = document.getElementById('tagDbNumber').value;
+                const startAddress = document.getElementById('tagAddress').value;
                 
-                if (!data.db_number || isNaN(data.start_address)) {
-                    showToast('Please enter DB number and address', 'error');
-                    return;
+                if (dbNumber) data.db_number = parseInt(dbNumber);
+                if (startAddress !== '') data.start_address = parseInt(startAddress);
+                data.bit_number = parseInt(document.getElementById('tagBitNumber').value) || 0;
+                
+                if (!isEditMode) {
+                    data.data_size = parseInt(document.getElementById('tagDataSize').value);
+                    
+                    if (!data.db_number || isNaN(data.start_address)) {
+                        showToast('Please enter DB number and address', 'error');
+                        return;
+                    }
                 }
             }
             
             try {
-                const response = await fetch('/api/tags', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
+                let response;
+                if (isEditMode) {
+                    // PUT request for update
+                    response = await fetch(`/api/tags/${editId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                } else {
+                    // POST request for create
+                    response = await fetch('/api/tags', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                }
                 
                 if (response.ok) {
                     const result = await response.json();
-                    showToast(`Tag "${result.name}" added`, 'success');
+                    if (isEditMode) {
+                        showToast(`Tag "${data.name}" updated`, 'success');
+                    } else {
+                        showToast(`Tag "${result.name}" added`, 'success');
+                        // Make new tag visible by default
+                        visibleTagIds.add(result.id);
+                    }
                     closeModal();
-                    // Make new tag visible by default
-                    visibleTagIds.add(result.id);
                     await loadTags();
                     await initTrends();
                 } else {
                     const error = await response.json();
-                    showToast(error.detail || 'Error creating tag', 'error');
+                    showToast(error.detail || (isEditMode ? 'Error updating tag' : 'Error creating tag'), 'error');
                 }
             } catch (error) {
                 showToast('Network error', 'error');
@@ -2039,13 +2196,29 @@
                 
                 plcSelector.innerHTML = plcs.map(plc => {
                     const typeLabel = plc.plc_type === 'allen_bradley' ? 'AB' : 'S7';
+                    const isActive = plc.is_active !== false;
+                    const inactiveStyle = !isActive ? 'opacity: 0.5;' : '';
+                    
+                    // Status icon based on connection
+                    let statusIcon = '⏸️';  // stopped/paused
+                    if (isActive) {
+                        if (plc.connection_status === 'connected') {
+                            statusIcon = '🟢';  // connected - green
+                        } else if (plc.connection_status === 'disconnected') {
+                            statusIcon = '🔴';  // disconnected - red
+                        } else {
+                            statusIcon = '🟡';  // unknown - yellow
+                        }
+                    }
+                    
                     return `
-                    <div class="plc-btn ${selectedPlcId === plc.id ? 'active' : ''}" onclick="selectPLC(${plc.id}, '${plc.plc_type || 'siemens_s7'}')">
+                    <div class="plc-btn ${selectedPlcId === plc.id ? 'active' : ''}" style="${inactiveStyle}" onclick="selectPLC(${plc.id}, '${plc.plc_type || 'siemens_s7'}')">
                         <div class="plc-main">
-                            <div class="plc-name">${plc.name} <span style="color: var(--text-muted); font-size: 0.7rem;">[${typeLabel}]</span></div>
+                            <div class="plc-name">${statusIcon} ${plc.name} <span style="color: var(--text-muted); font-size: 0.7rem;">[${typeLabel}]</span></div>
                             <div class="plc-info">${plc.ip_address} • ${plc.tag_count} tags</div>
                         </div>
                         <div class="plc-actions">
+                            <button class="plc-action-btn" onclick="event.stopPropagation(); togglePLC(${plc.id})" title="${isActive ? 'Pause polling' : 'Resume polling'}">${isActive ? '⏸️' : '▶️'}</button>
                             <button class="plc-action-btn" onclick="event.stopPropagation(); editPLC(${plc.id}, '${plc.name}', '${plc.plc_type || 'siemens_s7'}', '${plc.ip_address}', ${plc.tcp_port}, ${plc.rack}, ${plc.slot}, ${plc.slot_ab || 0})" title="Edit">✏️</button>
                             <button class="plc-action-btn delete" onclick="event.stopPropagation(); deletePLC(${plc.id}, '${plc.name}')" title="Delete">🗑️</button>
                         </div>
@@ -2198,8 +2371,8 @@
             const banner = document.getElementById('connectionBanner');
             const bannerText = document.getElementById('bannerText');
             banner.classList.add('show');
-            banner.style.background = 'linear-gradient(135deg, var(--warning), #b45309)';
-            bannerText.innerHTML = '⚠️ Configuration changed. <button onclick="restartCollector()" style="background: white; color: #b45309; border: none; padding: 0.25rem 0.75rem; border-radius: 4px; cursor: pointer; font-weight: 500; margin-left: 0.5rem;">🔄 Restart</button>';
+            banner.style.background = 'var(--warning)';
+            bannerText.innerHTML = '⚠️ Config changed <button onclick="restartCollector()">Restart</button>';
         }
         
         async function restartCollector() {
@@ -2216,6 +2389,23 @@
                     }, 2000);
                 } else {
                     showToast('Restart error', 'error');
+                }
+            } catch (error) {
+                showToast('Network error', 'error');
+            }
+        }
+        
+        async function togglePLC(id) {
+            try {
+                const response = await fetch(`/api/plcs/${id}/toggle`, { method: 'PUT' });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showToast(result.message, 'success');
+                    await loadPLCs();
+                    await loadStatus();  // Update header warning
+                } else {
+                    showToast('Toggle error', 'error');
                 }
             } catch (error) {
                 showToast('Network error', 'error');
@@ -2284,19 +2474,46 @@
                 // Update status indicator
                 dot.className = 'status-dot';
                 
-                if (status.connection_status === 'connected') {
+                // Check for PLC errors from status API
+                const plcErrors = status.plc_errors || {};
+                let errorPLCs = Object.keys(plcErrors);
+                
+                // Also check for disconnected PLCs - fetch fresh data
+                if (errorPLCs.length === 0) {
+                    try {
+                        const plcResponse = await fetch('/api/plcs');
+                        if (plcResponse.ok) {
+                            const plcs = await plcResponse.json();
+                            const disconnectedPLCs = plcs.filter(p => p.is_active && p.connection_status === 'disconnected');
+                            errorPLCs = disconnectedPLCs.map(p => p.name);
+                        }
+                    } catch (e) { /* ignore */ }
+                }
+                
+                if (errorPLCs.length > 0) {
+                    // Show error with PLC names
+                    dot.classList.add('disconnected');
+                    text.textContent = 'Error';
+                    banner.classList.add('show');
+                    banner.style.background = 'var(--danger)';
+                    const errorList = errorPLCs.join(', ');
+                    bannerText.textContent = `🔴 Error: ${errorList}`;
+                } else if (status.connection_status === 'connected') {
                     text.textContent = 'Connected';
                     banner.classList.remove('show');
+                    banner.style.background = '';
                 } else if (status.connection_status === 'disconnected') {
                     dot.classList.add('disconnected');
                     text.textContent = 'Disconnected';
                     banner.classList.add('show');
-                    bannerText.textContent = 'No PLC connection. Collector is trying to reconnect...';
+                    banner.style.background = 'var(--danger)';
+                    bannerText.textContent = '⚠️ No PLC connection';
                 } else if (status.connection_status === 'stopped') {
                     dot.classList.add('stopped');
                     text.textContent = 'Stopped';
                     banner.classList.add('show');
-                    bannerText.textContent = 'Collector stopped';
+                    banner.style.background = 'var(--text-muted)';
+                    bannerText.textContent = '⏸️ Collector stopped';
                 } else {
                     dot.classList.add('stopped');
                     text.textContent = 'Unknown';
@@ -2350,7 +2567,22 @@
             
             if (!isFirstRun) {
                 await loadPLCs();   // Сначала ПЛК (установит selectedPlcId)
-                await loadTags();   // Потом теги (отфильтрует по ПЛК)
+                
+                // Try to load saved visible tags from localStorage
+                const hadSavedState = loadVisibleTags();
+                
+                // If no saved state, make all tags visible by default
+                if (!hadSavedState) {
+                    const url = selectedPlcId ? `/api/tags?plc_id=${selectedPlcId}` : '/api/tags';
+                    const response = await fetch(url);
+                    if (response.ok) {
+                        const tags = await response.json();
+                        tags.forEach(tag => visibleTagIds.add(tag.id));
+                        saveVisibleTags();
+                    }
+                }
+                
+                await loadTags();   // Теперь рендерим теги с правильными чекбоксами
                 await initTrends(); // Загружаем все тренды на график
             }
             

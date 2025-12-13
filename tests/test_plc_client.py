@@ -82,13 +82,13 @@ class TestPLCClient:
         plc = PLC(plc_ip="127.0.0.1", tcp_port=2000)
         
         with patch.object(plc.client, 'connect') as mock_connect:
-            with patch.object(plc.client, 'db_read') as mock_read:
-                mock_read.return_value = b'\x00'  # Successful test read
-                
+            with patch.object(plc.client, 'get_connected', return_value=True) as mock_get_connected:
                 result = plc.connect()
                 
                 assert result == True
                 assert plc.connected == True
+                mock_connect.assert_called_once()
+                mock_get_connected.assert_called_once()
     
     def test_connect_failure(self):
         """Connection failure"""

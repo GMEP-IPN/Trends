@@ -15,6 +15,7 @@ from app.storage.models import PLC_TYPE_SIEMENS_S7, PLC_TYPE_ALLEN_BRADLEY
 from app.collectors.S7Comm.siemens_s7 import PLC as S7Client, PLCConnectionError, PLCReadError
 from app.config.settings import BATCH_INSERT_SIZE
 from app.services.trend_service import cleanup_old_data
+from app.services.collector_status import collector_status
 
 # Пытаемся импортировать Allen-Bradley клиент
 try:
@@ -102,12 +103,12 @@ class PLCConnection:
             # Check for NaN or Infinity
             import math
             if math.isnan(float_value) or math.isinf(float_value):
-                logger.warning(f"⚠️ Invalid value (NaN/Inf) for tag {tag.name}, skipping")
+                logger.warning(f"Invalid value (NaN/Inf) for tag {tag.name}, skipping")
                 return None
             
             # Check for extreme values (likely garbage data)
             if abs(float_value) > 1e9:
-                logger.warning(f"⚠️ Extreme value {float_value} for tag {tag.name}, skipping")
+                logger.warning(f"Extreme value {float_value} for tag {tag.name}, skipping")
                 return None
             
             self.last_poll[tag.id] = datetime.now()
@@ -119,16 +120,18 @@ class PLCConnection:
                 quality=192  # Good (OPC standard)
             )
         except (PLCReadError, ABReadError) as e:
-            logger.warning(f"⚠️ Read error for tag {tag.name}: {e}")
+            logger.warning(f"Read error for tag {tag.name}: {e}")
+            collector_status.set_plc_status(self.plc_id, False, str(e))
             return None
         except (PLCConnectionError, ABConnectionError) as e:
-            logger.error(f"❌ Connection error for tag {tag.name}: {e}")
+            logger.error(f"Connection error for tag {tag.name}: {e}")
+            collector_status.set_plc_status(self.plc_id, False, str(e))
             return None
         except ValueError as e:
-            logger.error(f"❌ Invalid data type for tag {tag.name}: {e}")
+            logger.error(f"Invalid data type for tag {tag.name}: {e}")
             return None
         except Exception as e:
-            logger.error(f"❌ Unexpected error polling tag {tag.name}: {e}")
+            logger.error(f"Unexpected error polling tag {tag.name}: {e}")
             return None
     
     def _read_s7_tag(self, tag: Tag) -> Optional[Any]:
@@ -146,7 +149,7 @@ class PLCConnection:
         # Для AB используем имя тега
         ab_tag_name = getattr(tag, 'ab_tag_name', None)
         if not ab_tag_name:
-            logger.error(f"❌ No AB tag name configured for tag {tag.name}")
+            logger.error(f"No AB tag name configured for tag {tag.name}")
             return None
         return self.client.read_tag(ab_tag_name)
 
@@ -183,7 +186,7 @@ class CollectorService:
     
     def load_configuration(self):
         """Загрузка конфигурации ПЛК и тегов из БД"""
-        print("📋 Loading configuration from database...")
+        logger.info("Loading configuration from database...")
         
         with get_session() as session:
             # Загружаем активные ПЛК
@@ -192,12 +195,12 @@ class CollectorService:
             for plc in plcs:
                 plc_type = getattr(plc, 'plc_type', PLC_TYPE_SIEMENS_S7)
                 type_label = "AB" if plc_type == PLC_TYPE_ALLEN_BRADLEY else "S7"
-                print(f"  📡 Loading PLC [{type_label}]: {plc.name} @ {plc.ip_address}:{plc.tcp_port}")
+                logger.info(f"  Loading PLC [{type_label}]: {plc.name} @ {plc.ip_address}:{plc.tcp_port}")
                 
                 try:
                     conn = PLCConnection(plc)
                 except RuntimeError as e:
-                    print(f"  ❌ Failed to create connection for '{plc.name}': {e}")
+                    logger.error(f"  Failed to create connection for '{plc.name}': {e}")
                     continue
                 
                 # Загружаем активные теги для этого ПЛК
@@ -224,9 +227,9 @@ class CollectorService:
                     conn.add_tag(tag_copy)
                 
                 self.connections[plc.id] = conn
-                print(f"  ✅ PLC '{plc.name}' loaded with {len(tags)} tags")
+                logger.info(f"  PLC '{plc.name}' loaded with {len(tags)} tags")
         
-        print(f"📋 Configuration loaded: {len(self.connections)} PLCs")
+        logger.info(f"Configuration loaded: {len(self.connections)} PLCs")
     
     def _flush_buffer(self):
         """Запись буфера в БД"""
@@ -257,7 +260,7 @@ class CollectorService:
             try:
                 deleted = cleanup_old_data(days=self._retention_days)
                 if deleted > 0:
-                    logger.info(f"🧹 Cleaned up {deleted} old records (>{self._retention_days} days)")
+                    logger.info(f"Cleaned up {deleted} old records (>{self._retention_days} days)")
                 self._last_cleanup = datetime.now()
             except Exception as e:
                 logger.error(f"Cleanup failed: {e}")
@@ -273,7 +276,7 @@ class CollectorService:
                             self.buffer.append(result)
                         
                         # Выводим значение в консоль (только успешные)
-                        logger.debug(f"✅ {tag.name}: {result.value}")
+                        logger.debug(f"{tag.name}: {result.value}")
         
         # Сброс буфера при достижении лимита или по времени
         time_to_flush = (datetime.now() - self._last_flush).total_seconds() >= self._flush_interval
@@ -286,53 +289,60 @@ class CollectorService:
     
     def _run_loop(self):
         """Главный цикл сервиса"""
-        print("🔄 Collector loop started")
+        logger.info("Collector loop started")
         
         while self.running:
             try:
                 self._poll_cycle()
                 time.sleep(0.01)  # 10ms между проверками
             except Exception as e:
-                print(f"❌ Error in collector loop: {e}")
+                logger.error(f"Error in collector loop: {e}")
                 time.sleep(1)
         
         # Финальная запись буфера
         self._flush_buffer()
-        print("🔄 Collector loop stopped")
+        logger.info("Collector loop stopped")
     
     def start(self):
         """Запуск сервиса"""
         if self.running:
-            print("⚠️ Collector already running")
+            logger.warning("Collector already running")
             return
         
-        print("🚀 Starting Collector Service...")
+        logger.info("Starting Collector Service...")
         
         # Загружаем конфигурацию
         self.load_configuration()
         
         if not self.connections:
-            print("⚠️ No PLCs configured. Add PLCs and tags to database first.")
+            logger.warning("No PLCs configured. Add PLCs and tags to database first.")
             return
         
         # Подключаемся к ПЛК
         for plc_id, conn in self.connections.items():
-            print(f"🔌 Connecting to PLC '{conn.name}'...")
-            conn.client.connect()
+            logger.info(f"Connecting to PLC '{conn.name}'...")
+            try:
+                conn.client.connect()
+                if conn.client.connected:
+                    collector_status.set_plc_status(plc_id, True)
+                else:
+                    collector_status.set_plc_status(plc_id, False, f"Connection failed")
+            except Exception as e:
+                collector_status.set_plc_status(plc_id, False, str(e))
         
         # Запускаем цикл опроса в отдельном потоке
         self.running = True
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
         
-        print("✅ Collector Service started")
+        logger.info("Collector Service started")
     
     def stop(self):
         """Остановка сервиса"""
         if not self.running:
             return
         
-        print("🛑 Stopping Collector Service...")
+        logger.info("Stopping Collector Service...")
         self.running = False
         
         if self._thread:
@@ -342,7 +352,7 @@ class CollectorService:
         for plc_id, conn in self.connections.items():
             conn.client.disconnect()
         
-        print("✅ Collector Service stopped")
+        logger.info("Collector Service stopped")
     
     def get_status(self) -> dict:
         """Получение статуса сервиса"""

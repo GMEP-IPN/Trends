@@ -5,102 +5,14 @@
 import threading
 import logging
 from typing import Optional, Dict, Any
-from dataclasses import dataclass, field
 
 from app.services.collector_service import CollectorService
+from app.services.collector_status import collector_status, CollectorStatus
 
 logger = logging.getLogger('trends')
 
-
-@dataclass
-class CollectorStatus:
-    """
-    Потокобезопасный статус коллектора.
-    Использует блокировку для безопасного доступа из разных потоков.
-    """
-    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
-    _running: bool = False
-    _connected: bool = False
-    _last_error: Optional[str] = None
-    _plc_name: Optional[str] = None
-    _restart_requested: bool = False
-    
-    @property
-    def running(self) -> bool:
-        with self._lock:
-            return self._running
-    
-    @running.setter
-    def running(self, value: bool):
-        with self._lock:
-            self._running = value
-    
-    @property
-    def connected(self) -> bool:
-        with self._lock:
-            return self._connected
-    
-    @connected.setter
-    def connected(self, value: bool):
-        with self._lock:
-            self._connected = value
-    
-    @property
-    def last_error(self) -> Optional[str]:
-        with self._lock:
-            return self._last_error
-    
-    @last_error.setter
-    def last_error(self, value: Optional[str]):
-        with self._lock:
-            self._last_error = value
-    
-    @property
-    def plc_name(self) -> Optional[str]:
-        with self._lock:
-            return self._plc_name
-    
-    @plc_name.setter
-    def plc_name(self, value: Optional[str]):
-        with self._lock:
-            self._plc_name = value
-    
-    @property
-    def restart_requested(self) -> bool:
-        with self._lock:
-            return self._restart_requested
-    
-    @restart_requested.setter
-    def restart_requested(self, value: bool):
-        with self._lock:
-            self._restart_requested = value
-    
-    def request_restart(self):
-        """Запросить перезапуск коллектора"""
-        with self._lock:
-            self._restart_requested = True
-    
-    def clear_restart_request(self) -> bool:
-        """Очистить запрос на перезапуск, вернуть True если был запрошен"""
-        with self._lock:
-            was_requested = self._restart_requested
-            self._restart_requested = False
-            return was_requested
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Получить все значения как словарь (потокобезопасно)"""
-        with self._lock:
-            return {
-                "running": self._running,
-                "connected": self._connected,
-                "last_error": self._last_error,
-                "plc_name": self._plc_name,
-                "restart_requested": self._restart_requested
-            }
-
-
-# Глобальный потокобезопасный статус
-collector_status = CollectorStatus()
+# Re-export for backward compatibility
+__all__ = ['CollectorManager', 'collector_status', 'CollectorStatus']
 
 
 class CollectorManager:
@@ -144,10 +56,14 @@ class CollectorManager:
             collector_status.running = self.collector.running
             
             if self.collector.connections:
-                for conn in self.collector.connections.values():
-                    collector_status.connected = conn.client.connected
+                any_connected = False
+                for plc_id, conn in self.collector.connections.items():
+                    is_connected = conn.client.connected
+                    collector_status.set_plc_status(plc_id, is_connected)
+                    if is_connected:
+                        any_connected = True
                     collector_status.plc_name = conn.name
-                    break
+                collector_status.connected = any_connected
             
             return self.collector.running
     
@@ -168,7 +84,7 @@ class CollectorManager:
         Returns:
             True если перезапущен успешно
         """
-        logger.info("🔄 Restarting collector...")
+        logger.info("Restarting collector...")
         
         with self._lock:
             if not self.collector:
@@ -187,17 +103,27 @@ class CollectorManager:
             self.collector.load_configuration()
             
             if not self.collector.connections:
-                logger.warning("⚠️ No PLCs configured")
+                logger.warning("No PLCs configured")
                 collector_status.connected = False
                 collector_status.running = False
                 return False
             
             # Переподключаемся
+            any_connected = False
             for plc_id, conn in self.collector.connections.items():
-                logger.info(f"🔌 Reconnecting to PLC '{conn.name}'...")
-                conn.client.connect()
-                collector_status.connected = conn.client.connected
+                logger.info(f"Reconnecting to PLC '{conn.name}'...")
+                try:
+                    conn.client.connect()
+                    is_connected = conn.client.connected
+                    if is_connected:
+                        collector_status.set_plc_status(plc_id, True)
+                        any_connected = True
+                    else:
+                        collector_status.set_plc_status(plc_id, False, "Connection failed")
+                except Exception as e:
+                    collector_status.set_plc_status(plc_id, False, str(e))
                 collector_status.plc_name = conn.name
+            collector_status.connected = any_connected
             
             # Перезапускаем цикл опроса
             self.collector.running = True
@@ -208,7 +134,7 @@ class CollectorManager:
             self.collector._thread.start()
             
             collector_status.running = True
-            logger.info("✅ Collector restarted")
+            logger.info("Collector restarted")
             return True
     
     def check_restart_request(self) -> bool:
@@ -226,13 +152,27 @@ class CollectorManager:
         """Обновить статус подключения из текущих соединений"""
         with self._lock:
             if self.collector and self.collector.running:
-                for conn in self.collector.connections.values():
-                    # Логируем для отладки
-                    logger.debug(f"Connection status for {conn.name}: connected={conn.client.connected}")
-                    collector_status.connected = conn.client.connected
-                    break
+                any_connected = False
+                # Get active PLC IDs from current connections
+                active_plc_ids = set(self.collector.connections.keys())
+                
+                for plc_id, conn in self.collector.connections.items():
+                    is_connected = conn.client.connected
+                    collector_status.set_plc_status(plc_id, is_connected)
+                    if is_connected:
+                        any_connected = True
+                
+                # Clear errors for PLCs not in active connections (deactivated)
+                with collector_status._lock:
+                    for plc_id in list(collector_status._plc_errors.keys()):
+                        if plc_id not in active_plc_ids:
+                            collector_status._plc_errors.pop(plc_id, None)
+                            collector_status._plc_statuses.pop(plc_id, None)
+                
+                collector_status.connected = any_connected
             else:
                 collector_status.connected = False
+                collector_status.clear_plc_statuses()
     
     def get_status(self) -> Dict[str, Any]:
         """Получить полный статус"""

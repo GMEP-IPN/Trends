@@ -210,13 +210,15 @@ class TestTagsEndpoint:
             mock_tag.is_active = True
             
             session.query.return_value.filter.return_value.first.return_value = mock_tag
+            session.query.return_value.filter.return_value.delete.return_value = 5  # 5 trend records deleted
             mock_session.return_value.__enter__ = MagicMock(return_value=session)
             mock_session.return_value.__exit__ = MagicMock(return_value=False)
             
             response = client.delete("/api/tags/1")
             
             assert response.status_code == 200
-            assert mock_tag.is_active == False
+            # Тег полностью удаляется через session.delete()
+            session.delete.assert_called_once_with(mock_tag)
             assert "deleted" in response.json()["message"]
     
     def test_delete_tag_not_found(self, client):
@@ -228,6 +230,60 @@ class TestTagsEndpoint:
             mock_session.return_value.__exit__ = MagicMock(return_value=False)
             
             response = client.delete("/api/tags/999")
+            
+            assert response.status_code == 404
+    
+    def test_update_tag_success(self, client, reset_collector_status):
+        """Успешное обновление тега"""
+        with patch('app.api.server.get_session') as mock_session:
+            session = MagicMock()
+            
+            mock_tag = MagicMock()
+            mock_tag.id = 1
+            mock_tag.name = "OldName"
+            mock_tag.plc_id = 1
+            mock_tag.description = "Old description"
+            mock_tag.db_number = 1
+            mock_tag.start_address = 0
+            mock_tag.data_type = "real"
+            mock_tag.poll_interval_ms = 1000
+            
+            mock_plc = MagicMock()
+            mock_plc.id = 1
+            mock_plc.plc_type = "siemens_s7"
+            
+            # Первый вызов - поиск тега, второй - поиск ПЛК
+            session.query.return_value.filter.return_value.first.side_effect = [
+                mock_tag,
+                mock_plc
+            ]
+            
+            mock_session.return_value.__enter__ = MagicMock(return_value=session)
+            mock_session.return_value.__exit__ = MagicMock(return_value=False)
+            
+            response = client.put("/api/tags/1", json={
+                "name": "NewName",
+                "description": "New description",
+                "poll_interval_ms": 2000
+            })
+            
+            assert response.status_code == 200
+            assert mock_tag.name == "NewName"
+            assert mock_tag.description == "New description"
+            assert mock_tag.poll_interval_ms == 2000
+            assert "updated" in response.json()["message"]
+    
+    def test_update_tag_not_found(self, client):
+        """Обновление несуществующего тега"""
+        with patch('app.api.server.get_session') as mock_session:
+            session = MagicMock()
+            session.query.return_value.filter.return_value.first.return_value = None
+            mock_session.return_value.__enter__ = MagicMock(return_value=session)
+            mock_session.return_value.__exit__ = MagicMock(return_value=False)
+            
+            response = client.put("/api/tags/999", json={
+                "name": "NewName"
+            })
             
             assert response.status_code == 404
 
@@ -243,10 +299,12 @@ class TestPLCsEndpoint:
             mock_plc = MagicMock()
             mock_plc.id = 1
             mock_plc.name = "TestPLC"
+            mock_plc.plc_type = "siemens_s7"  # Добавлено для нового поля
             mock_plc.ip_address = "192.168.1.10"
             mock_plc.tcp_port = 102
             mock_plc.rack = 0
             mock_plc.slot = 1
+            mock_plc.slot_ab = 0  # Добавлено для Allen-Bradley
             mock_plc.is_active = True
             
             session.query.return_value.filter.return_value.all.return_value = [mock_plc]
@@ -261,6 +319,7 @@ class TestPLCsEndpoint:
             data = response.json()
             assert len(data) == 1
             assert data[0]["name"] == "TestPLC"
+            assert data[0]["plc_type"] == "siemens_s7"
             assert data[0]["rack"] == 0
             assert data[0]["slot"] == 1
     

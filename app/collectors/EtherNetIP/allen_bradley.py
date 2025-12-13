@@ -21,7 +21,7 @@ except ImportError:
     PYCOMM3_AVAILABLE = False
     LogixDriver = None
     CommError = Exception
-    logger.warning("⚠️ pycomm3 not installed. Allen-Bradley support disabled. Install with: pip install pycomm3")
+    logger.warning("pycomm3 not installed. Allen-Bradley support disabled. Install with: pip install pycomm3")
 
 
 class ABConnectionError(Exception):
@@ -74,7 +74,7 @@ class ABClient:
             return True
         
         try:
-            logger.info(f"🔌 Connecting to Allen-Bradley at {self.plc_ip} slot {self.slot}...")
+            logger.info(f"Connecting to Allen-Bradley at {self.plc_ip} slot {self.slot}...")
             
             # Закрываем старое соединение если есть
             self.disconnect()
@@ -86,15 +86,15 @@ class ABClient:
             self._driver.open()
             
             self.connected = True
-            logger.info(f"✅ Connected to Allen-Bradley at {self.plc_ip}")
+            logger.info(f"Connected to Allen-Bradley at {self.plc_ip}")
             return True
             
         except CommError as e:
-            logger.warning(f"⚠️ Connection failed to {self.plc_ip}: {e}")
+            logger.warning(f"Connection failed to {self.plc_ip}: {e}")
             self.connected = False
             return False
         except Exception as e:
-            logger.error(f"❌ Unexpected error connecting to {self.plc_ip}: {e}")
+            logger.error(f"Unexpected error connecting to {self.plc_ip}: {e}")
             self.connected = False
             return False
 
@@ -103,7 +103,7 @@ class ABClient:
         if self._driver:
             try:
                 self._driver.close()
-                logger.info(f"🔌 Disconnected from Allen-Bradley {self.plc_ip}")
+                logger.info(f"Disconnected from Allen-Bradley {self.plc_ip}")
             except Exception as e:
                 logger.warning(f"Warning during disconnect: {e}")
             finally:
@@ -129,7 +129,7 @@ class ABClient:
         max_attempts = timeout_attempts if timeout_attempts is not None else self.max_reconnect_attempts
         attempts = 0
         
-        logger.info(f"🔄 Reconnecting to Allen-Bradley {self.plc_ip}...")
+        logger.info(f"Reconnecting to Allen-Bradley {self.plc_ip}...")
         
         while not self.connected:
             attempts += 1
@@ -140,7 +140,7 @@ class ABClient:
             # Проверяем лимит попыток (0 = бесконечно)
             if max_attempts > 0 and attempts >= max_attempts:
                 error_msg = f"Failed to connect to {self.plc_ip} after {attempts} attempts"
-                logger.error(f"❌ {error_msg}")
+                logger.error(f"{error_msg}")
                 raise ABConnectionError(error_msg)
             
             logger.info(f"   Attempt {attempts}/{max_attempts if max_attempts > 0 else '∞'}, retrying in {self.reconnect_delay}s...")
@@ -175,7 +175,7 @@ class ABClient:
             return result.value
 
         except CommError as e:
-            logger.warning(f"⚠️ Read failed for tag '{tag_name}': {e}")
+            logger.warning(f"Read failed for tag '{tag_name}': {e}")
             
             # Пробуем переподключиться и повторить
             try:
@@ -192,7 +192,7 @@ class ABClient:
                 raise ABReadError(f"Failed to read tag '{tag_name}' after retry: {retry_err}")
         
         except Exception as e:
-            logger.error(f"❌ Unexpected read error for tag '{tag_name}': {e}")
+            logger.error(f"Unexpected read error for tag '{tag_name}': {e}")
             self.connected = False
             raise ABReadError(f"Unexpected error reading tag '{tag_name}': {e}")
 
@@ -221,7 +221,7 @@ class ABClient:
             values = {}
             for result in results:
                 if result.error:
-                    logger.warning(f"⚠️ Error reading tag '{result.tag}': {result.error}")
+                    logger.warning(f"Error reading tag '{result.tag}': {result.error}")
                     values[result.tag] = None
                 else:
                     values[result.tag] = result.value
@@ -229,11 +229,11 @@ class ABClient:
             return values
 
         except CommError as e:
-            logger.error(f"❌ Batch read failed: {e}")
+            logger.error(f"Batch read failed: {e}")
             self.connected = False
             raise ABReadError(f"Batch read failed: {e}")
         except Exception as e:
-            logger.error(f"❌ Unexpected batch read error: {e}")
+            logger.error(f"Unexpected batch read error: {e}")
             self.connected = False
             raise ABReadError(f"Unexpected batch read error: {e}")
 
@@ -256,7 +256,7 @@ class ABClient:
                 for tag in tags
             ]
         except Exception as e:
-            logger.error(f"❌ Failed to get tag list: {e}")
+            logger.error(f"Failed to get tag list: {e}")
             raise ABReadError(f"Failed to get tag list: {e}")
 
 

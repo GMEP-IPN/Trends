@@ -63,7 +63,7 @@ def run_simulator(port: int = 2000, db_size: int = 2000, update_interval: float 
     srv.register_area(SrvArea.DB, 1, db_data)
     srv.start(port)
     
-    logger.info(f"🏠 Room Simulator started on localhost:{port}")
+    logger.info(f"Room Simulator started on localhost:{port}")
     logger.info("   DB1.0: Temperature, DB1.4: Humidity")
     logger.info("   Other addresses: random values 30-70")
     
@@ -113,7 +113,7 @@ def run_simulator(port: int = 2000, db_size: int = 2000, update_interval: float 
         logger.error(f"Simulator error: {e}")
     finally:
         srv.destroy()
-        logger.info("🏠 Room Simulator stopped")
+        logger.info("Room Simulator stopped")
 
 
 def show_status():
@@ -122,7 +122,7 @@ def show_status():
     init_db()
     
     print("\n" + "="*60)
-    print("📊 SYSTEM STATUS")
+    print("SYSTEM STATUS")
     print("="*60)
     
     with get_session() as session:
@@ -152,7 +152,7 @@ def show_status():
                 print(f"    - {plc.name}: {plc.ip_address}:{plc.tcp_port} ({tags} tags)")
     
     print("\n" + "="*60)
-    print("💡 Configure PLCs via web interface: http://127.0.0.1:8000")
+    print("Configure PLCs via web interface: http://127.0.0.1:8000")
     print("="*60 + "\n")
 
 
@@ -163,12 +163,12 @@ def run_collector(config, simulate=False):
     logger = get_logger()
     
     # Инициализируем БД
-    logger.info("📦 Initializing database...")
+    logger.info("Initializing database...")
     init_db()
     
     # Запуск симулятора в отдельном потоке
     if simulate:
-        logger.info("🚀 Starting in SIMULATION mode...")
+        logger.info("Starting in SIMULATION mode...")
         simulator_thread = threading.Thread(
             target=run_simulator,
             args=(config.simulator_port, config.simulator_db_size, config.simulator_update_interval),
@@ -178,13 +178,13 @@ def run_collector(config, simulate=False):
         
         # Даём симулятору время запуститься
         import time
-        time.sleep(2)
+        time.sleep(4)
         
         # Создаём SimPLC в БД если его нет
         with get_session() as session:
             sim_plc = session.query(PLC).filter(PLC.name == "SimPLC").first()
             if not sim_plc:
-                logger.info("📝 Creating SimPLC for simulation...")
+                logger.info("Creating SimPLC for simulation...")
                 sim_plc = PLC(
                     name="SimPLC",
                     ip_address="127.0.0.1",
@@ -219,7 +219,7 @@ def run_collector(config, simulate=False):
                     poll_interval_ms=1000,
                     is_active=True
                 ))
-                logger.info("✅ SimPLC created with 2 tags")
+                logger.info("SimPLC created with 2 tags")
     
     # Запуск веб-сервера в отдельном потоке
     def run_web():
@@ -232,7 +232,7 @@ def run_collector(config, simulate=False):
             log_level="warning"
         )
     
-    logger.info(f"🌐 Starting web server at http://{config.api_host}:{config.api_port}")
+    logger.info(f"Starting web server at http://{config.api_host}:{config.api_port}")
     web_thread = threading.Thread(target=run_web, daemon=True)
     web_thread.start()
     
@@ -257,9 +257,9 @@ def run_collector(config, simulate=False):
     mode = "SIMULATION" if simulate else "PRODUCTION"
     
     print("\n" + "="*60)
-    print(f"📊 Trends v{__version__} [{mode}]")
-    print(f"🌐 Web interface: http://{config.api_host}:{config.api_port}")
-    print(f"⌨️  Press Ctrl+C to stop")
+    print(f"Trends v{__version__} [{mode}]")
+    print(f"Web interface: http://{config.api_host}:{config.api_port}")
+    print(f"Press Ctrl+C to stop")
     print("="*60 + "\n")
     
     try:
@@ -299,8 +299,8 @@ def main():
         config = load_config(args.config)
         setup_logging(config)
     except FileNotFoundError:
-        print(f"❌ Config file not found: {args.config}")
-        print("   Create config.yaml or specify path with --config")
+        print(f"Config file not found: {args.config}")
+        print("Create config.yaml or specify path with --config")
         sys.exit(1)
     
     # Выполняем команду

@@ -162,3 +162,4 @@ class TestGlobalCollectorStatus:
         collector_status.plc_name = "TestSingleton"
         assert status2.plc_name == "TestSingleton"
 
+

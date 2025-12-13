@@ -38,7 +38,7 @@ def _run_migrations():
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE tags ADD COLUMN bit_number INTEGER DEFAULT 0"))
             conn.commit()
-        print("✅ Migration: added 'bit_number' column to tags table")
+        logger.info("Migration: added 'bit_number' column to tags table")
     
     # Миграция: обновление уникального индекса для включения bit_number
     indexes = inspector.get_indexes('tags')
@@ -50,7 +50,7 @@ def _run_migrations():
             conn.execute(text("DROP INDEX IF EXISTS ix_tag_plc_address"))
             conn.execute(text("CREATE UNIQUE INDEX ix_tag_plc_address_bit ON tags (plc_id, db_number, start_address, bit_number)"))
             conn.commit()
-        print("✅ Migration: updated unique index to include bit_number")
+        logger.info("Migration: updated unique index to include bit_number")
 
 
 def init_db():
@@ -59,13 +59,13 @@ def init_db():
     _run_migrations()
     # Затем создаём недостающие таблицы
     Base.metadata.create_all(bind=engine)
-    print("✅ Database initialized")
+    logger.info("Database initialized")
 
 
 def drop_db():
     """Удаление всех таблиц (осторожно!)"""
     Base.metadata.drop_all(bind=engine)
-    print("🗑️ Database dropped")
+    logger.info("Database dropped")
 
 
 @contextmanager

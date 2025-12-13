@@ -84,22 +84,26 @@ class TestTagModel:
         assert "Temperature" in repr(sample_tag)
         assert "DB1" in repr(sample_tag)
     
-    def test_tag_unique_address(self, temp_db, sample_plc, sample_tag):
-        """Адрес тега уникален в рамках ПЛК"""
+    def test_tag_same_address_allowed(self, temp_db, sample_plc, sample_tag):
+        """Теги с одинаковым адресом разрешены (для Allen-Bradley поддержки)"""
         session, _ = temp_db
         
-        duplicate = Tag(
+        # Можно создать тег с тем же адресом (индекс не уникальный)
+        # Валидация уникальности происходит на уровне API
+        tag2 = Tag(
             plc_id=sample_plc.id,
-            name="DuplicateTag",
+            name="AnotherTag",
             db_number=1,      # Тот же DB
             start_address=0,  # Тот же адрес
             data_type="int",
             data_size=2
         )
-        session.add(duplicate)
+        session.add(tag2)
+        session.commit()  # Не должен вызывать ошибку
         
-        with pytest.raises(Exception):
-            session.commit()
+        # Оба тега существуют
+        count = session.query(Tag).filter(Tag.plc_id == sample_plc.id).count()
+        assert count == 2
 
 
 class TestTrendDataModel:
@@ -168,4 +172,5 @@ class TestTrendDataModel:
         ).count()
         
         assert count == 10
+
 

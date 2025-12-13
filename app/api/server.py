@@ -2,7 +2,7 @@
 REST API сервер для Trends Collector.
 """
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Optional, List, Dict
 from pathlib import Path
 import re
 
@@ -28,7 +28,7 @@ from app.services.trend_service import (
     get_statistics,
     get_all_tags
 )
-from app.services.collector_manager import collector_status
+from app.services.collector_status import collector_status
 
 app = FastAPI(
     title="Trends Collector API",
@@ -55,6 +55,7 @@ class PLCResponse(BaseModel):
     slot_ab: int = 0  # Для Allen-Bradley
     is_active: bool
     tag_count: int
+    connection_status: str = "unknown"  # connected, disconnected, stopped
 
 
 class TagResponse(BaseModel):
@@ -95,6 +96,7 @@ class SystemStatusResponse(BaseModel):
     last_update: Optional[str]
     collector_running: bool = False
     connection_status: str = "unknown"  # connected, disconnected, error
+    plc_errors: Dict[str, str] = {}  # plc_name -> error message
 
 
 # Размеры типов данных S7 (в байтах)
@@ -189,6 +191,69 @@ class TagCreateResponse(BaseModel):
     id: int
     name: str
     message: str
+
+
+class TagUpdateRequest(BaseModel):
+    """Запрос на обновление тега"""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    # Siemens S7 addressing
+    db_number: Optional[int] = None
+    start_address: Optional[int] = None
+    bit_number: Optional[int] = None
+    data_type: Optional[str] = None
+    # Allen-Bradley addressing
+    ab_tag_name: Optional[str] = None
+    poll_interval_ms: Optional[int] = None
+    
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v = v.strip()
+            if not v:
+                raise ValueError('Tag name cannot be empty')
+            if len(v) > 100:
+                raise ValueError('Tag name too long (max 100 characters)')
+        return v
+    
+    @field_validator('db_number')
+    @classmethod
+    def validate_db_number(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and not 1 <= v <= 65535:
+            raise ValueError('DB number must be between 1 and 65535')
+        return v
+    
+    @field_validator('start_address')
+    @classmethod
+    def validate_start_address(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and not 0 <= v <= 65535:
+            raise ValueError('Start address must be between 0 and 65535')
+        return v
+    
+    @field_validator('data_type')
+    @classmethod
+    def validate_data_type(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v = v.lower().strip()
+            valid_types = {'int', 'dint', 'real', 'bool', 'word', 'dword', 'string'}
+            if v not in valid_types:
+                raise ValueError(f'Invalid data type. Must be one of: {", ".join(valid_types)}')
+        return v
+    
+    @field_validator('poll_interval_ms')
+    @classmethod
+    def validate_poll_interval(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and not 100 <= v <= 60000:
+            raise ValueError('Poll interval must be between 100ms and 60000ms')
+        return v
+    
+    @field_validator('bit_number')
+    @classmethod
+    def validate_bit_number(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and not 0 <= v <= 7:
+            raise ValueError('Bit number must be between 0 and 7')
+        return v
 
 
 class PLCCreateRequest(BaseModel):
@@ -298,6 +363,16 @@ async def get_status():
         else:
             conn_status = "stopped"
         
+        # Получаем ошибки PLC с именами
+        plc_errors = {}
+        errors_by_id = collector_status.get_all_errors()
+        if errors_by_id:
+            plcs = session.query(PLC).filter(PLC.id.in_(errors_by_id.keys())).all()
+            plc_names = {p.id: p.name for p in plcs}
+            for plc_id, error in errors_by_id.items():
+                plc_name = plc_names.get(plc_id, f"PLC #{plc_id}")
+                plc_errors[plc_name] = error
+        
         return SystemStatusResponse(
             version=__version__,
             plc_count=plc_count,
@@ -305,15 +380,16 @@ async def get_status():
             trend_count=trend_count,
             last_update=last_update,
             collector_running=collector_status.running,
-            connection_status=conn_status
+            connection_status=conn_status,
+            plc_errors=plc_errors
         )
 
 
 @app.get("/api/plcs", response_model=List[PLCResponse])
 async def list_plcs():
-    """Список ПЛК"""
+    """Список всех ПЛК (активных и неактивных)"""
     with get_session() as session:
-        plcs = session.query(PLC).filter(PLC.is_active == True).all()
+        plcs = session.query(PLC).all()
         
         result = []
         for plc in plcs:
@@ -321,6 +397,20 @@ async def list_plcs():
                 Tag.plc_id == plc.id, 
                 Tag.is_active == True
             ).count()
+            
+            # Определяем статус подключения для этого PLC
+            if not plc.is_active:
+                conn_status = "stopped"
+            elif collector_status.running:
+                plc_connected = collector_status.get_plc_status(plc.id)
+                if plc_connected is True:
+                    conn_status = "connected"
+                elif plc_connected is False:
+                    conn_status = "disconnected"
+                else:
+                    conn_status = "unknown"
+            else:
+                conn_status = "stopped"
             
             result.append(PLCResponse(
                 id=plc.id,
@@ -332,7 +422,8 @@ async def list_plcs():
                 slot=plc.slot,
                 slot_ab=getattr(plc, 'slot_ab', 0),
                 is_active=plc.is_active,
-                tag_count=tag_count
+                tag_count=tag_count,
+                connection_status=conn_status
             ))
         
         return result
@@ -406,22 +497,55 @@ async def update_plc(plc_id: int, request: PLCCreateRequest):
 
 @app.delete("/api/plcs/{plc_id}")
 async def delete_plc(plc_id: int):
-    """Удаление ПЛК (деактивация)"""
+    """Полное удаление ПЛК из базы данных"""
     with get_session() as session:
         plc = session.query(PLC).filter(PLC.id == plc_id).first()
         
         if not plc:
             raise HTTPException(status_code=404, detail="PLC not found")
         
-        plc.is_active = False
+        plc_name = plc.name
         
-        # Деактивируем все теги этого ПЛК
-        session.query(Tag).filter(Tag.plc_id == plc_id).update({"is_active": False})
+        # Удаляем все теги этого ПЛК
+        session.query(Tag).filter(Tag.plc_id == plc_id).delete()
+        
+        # Удаляем сам ПЛК
+        session.delete(plc)
         
         # Автоматический перезапуск коллектора
         collector_status.request_restart()
         
-        return {"message": f"PLC '{plc.name}' deleted", "id": plc_id}
+        return {"message": f"PLC '{plc_name}' deleted permanently", "id": plc_id}
+
+
+@app.put("/api/plcs/{plc_id}/toggle")
+async def toggle_plc(plc_id: int):
+    """Включение/выключение опроса ПЛК"""
+    with get_session() as session:
+        plc = session.query(PLC).filter(PLC.id == plc_id).first()
+        
+        if not plc:
+            raise HTTPException(status_code=404, detail="PLC not found")
+        
+        # Переключаем активность
+        plc.is_active = not plc.is_active
+        new_status = "enabled" if plc.is_active else "disabled"
+        
+        # Автоматический перезапуск коллектора
+        collector_status.request_restart()
+        
+        # Очищаем ошибку при деактивации ПОСЛЕ restart request
+        if not plc.is_active:
+            # Удаляем ошибку из словаря
+            with collector_status._lock:
+                collector_status._plc_errors.pop(plc_id, None)
+                collector_status._plc_statuses.pop(plc_id, None)
+        
+        return {
+            "message": f"PLC '{plc.name}' polling {new_status}",
+            "id": plc_id,
+            "is_active": plc.is_active
+        }
 
 
 @app.post("/api/collector/restart")
@@ -654,6 +778,62 @@ async def create_tag(request: TagCreateRequest):
             name=tag.name,
             message=f"Tag '{tag.name}' created successfully"
         )
+
+
+@app.put("/api/tags/{tag_id}")
+async def update_tag(tag_id: int, request: TagUpdateRequest):
+    """Обновление существующего тега"""
+    with get_session() as session:
+        tag = session.query(Tag).filter(Tag.id == tag_id).first()
+        
+        if not tag:
+            raise HTTPException(status_code=404, detail="Tag not found")
+        
+        # Получаем тип ПЛК
+        plc = session.query(PLC).filter(PLC.id == tag.plc_id).first()
+        plc_type = getattr(plc, 'plc_type', PLC_TYPE_SIEMENS_S7) if plc else PLC_TYPE_SIEMENS_S7
+        
+        # Обновляем только переданные поля
+        if request.name is not None:
+            tag.name = request.name
+        
+        if request.description is not None:
+            tag.description = request.description
+        
+        if request.poll_interval_ms is not None:
+            tag.poll_interval_ms = request.poll_interval_ms
+        
+        # Поля для Siemens S7
+        if plc_type == PLC_TYPE_SIEMENS_S7:
+            if request.db_number is not None:
+                tag.db_number = request.db_number
+            
+            if request.start_address is not None:
+                tag.start_address = request.start_address
+            
+            if request.data_type is not None:
+                tag.data_type = request.data_type
+                tag.data_size = get_data_size(request.data_type)
+                # Обновляем bit_number только для bool
+                if request.data_type == 'bool' and request.bit_number is not None:
+                    tag.bit_number = request.bit_number
+                elif request.data_type != 'bool':
+                    tag.bit_number = 0
+            elif request.bit_number is not None and tag.data_type == 'bool':
+                tag.bit_number = request.bit_number
+        
+        # Поля для Allen-Bradley
+        if plc_type == PLC_TYPE_ALLEN_BRADLEY:
+            if request.ab_tag_name is not None:
+                tag.ab_tag_name = request.ab_tag_name
+            
+            if request.data_type is not None:
+                tag.data_type = request.data_type
+        
+        # Автоматический перезапуск коллектора
+        collector_status.request_restart()
+        
+        return {"message": f"Tag '{tag.name}' updated", "id": tag_id}
 
 
 @app.delete("/api/tags/{tag_id}")

@@ -118,7 +118,7 @@ class TrendsApp:
             self.logger = setup_logging(self.config)
             self.server_url = f"http://{self.config.api_host}:{self.config.api_port}"
             
-            app_logger.info("🚀 Starting Trends application...")
+            app_logger.info("Starting Trends application...")
             
             # Инициализация БД
             app_logger.info("Initializing database...")
@@ -166,8 +166,8 @@ class TrendsApp:
             app_logger.info(f"Collector connections: {self.manager.collector.connections if self.manager.collector else 0}")
             
             self.running = True
-            app_logger.info(f"✅ Server running at {self.server_url}")
-            self.logger.info(f"✅ Server running at {self.server_url}")
+            app_logger.info(f"Server running at {self.server_url}")
+            self.logger.info(f"Server running at {self.server_url}")
             
             # Обновляем иконку
             if self.icon:

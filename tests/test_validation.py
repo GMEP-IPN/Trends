@@ -231,17 +231,17 @@ class TestTagValidation:
         )
         assert tag.data_type == "real"
     
-    def test_invalid_data_size_zero(self):
-        """Data size 0 fails validation"""
-        with pytest.raises(ValidationError) as exc:
-            TagCreateRequest(
-                name="Test",
-                db_number=1,
-                start_address=0,
-                data_type="real",
-                data_size=0
-            )
-        assert "Data size must be" in str(exc.value)
+    def test_data_size_optional(self):
+        """Data size is optional (can be None for Allen-Bradley)"""
+        # data_size can be None or omitted
+        tag = TagCreateRequest(
+            name="Test",
+            db_number=1,
+            start_address=0,
+            data_type="real"
+            # data_size не указан - допустимо
+        )
+        assert tag.data_size is None
     
     def test_invalid_poll_interval_too_low(self):
         """Poll interval < 100ms fails"""
@@ -304,4 +304,5 @@ class TestAPIValidationEndpoints:
             
             assert response.status_code == 422
             assert "Invalid data type" in response.text
+
 

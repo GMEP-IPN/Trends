@@ -84,7 +84,7 @@ class PLC:
             return True
             
         try:
-            logger.info(f"🔌 Connecting to {self.plc_ip}:{self.tcp_port}...")
+            logger.info(f"Connecting to {self.plc_ip}:{self.tcp_port}...")
             # Отключаемся перед новым подключением
             try:
                 self.client.disconnect()
@@ -92,24 +92,24 @@ class PLC:
                 pass  # Игнорируем ошибки отключения
 
             # Подключаемся с указанными параметрами
-            self.client.connect(self.plc_ip, self.rack, self.slot)
+            self.client.connect(self.plc_ip, self.rack, self.slot, self.tcp_port)
 
             # Проверяем статус соединения через API snap7
             if self.client.get_connected():
                 self.connected = True
-                logger.info(f"✅ Connected to PLC at {self.plc_ip}:{self.tcp_port}")
+                logger.info(f"Connected to PLC at {self.plc_ip}:{self.tcp_port}")
                 return True
             else:
                 self.connected = False
-                logger.warning(f"⚠️ Connection status check failed for {self.plc_ip}:{self.tcp_port}")
+                logger.warning(f"Connection status check failed for {self.plc_ip}:{self.tcp_port}")
                 return False
                 
         except (Snap7Exception, RuntimeError) as e:
-            logger.warning(f"⚠️ Connection failed to {self.plc_ip}:{self.tcp_port}: {e}")
+            logger.warning(f"Connection failed to {self.plc_ip}:{self.tcp_port}: {e}")
             self.connected = False
             return False
         except Exception as e:
-            logger.error(f"❌ Unexpected error connecting to {self.plc_ip}:{self.tcp_port}: {e}")
+            logger.error(f"Unexpected error connecting to {self.plc_ip}:{self.tcp_port}: {e}")
             self.connected = False
             return False
 
@@ -118,7 +118,7 @@ class PLC:
         if self.connected:
             try:
                 self.client.disconnect()
-                logger.info(f"🔌 Disconnected from PLC {self.plc_ip}:{self.tcp_port}")
+                logger.info(f"Disconnected from PLC {self.plc_ip}:{self.tcp_port}")
             except (Snap7Exception, RuntimeError) as e:
                 logger.warning(f"Warning during disconnect: {e}")
             except Exception as e:
@@ -145,7 +145,7 @@ class PLC:
         max_attempts = timeout_attempts if timeout_attempts is not None else self.max_reconnect_attempts
         attempts = 0
         
-        logger.info(f"🔄 Reconnecting to PLC {self.plc_ip}:{self.tcp_port}...")
+        logger.info(f"Reconnecting to PLC {self.plc_ip}:{self.tcp_port}...")
         
         while not self.connected:
             attempts += 1
@@ -156,7 +156,7 @@ class PLC:
             # Проверяем лимит попыток (0 = бесконечно)
             if max_attempts > 0 and attempts >= max_attempts:
                 error_msg = f"Failed to connect to {self.plc_ip}:{self.tcp_port} after {attempts} attempts"
-                logger.error(f"❌ {error_msg}")
+                logger.error(f"{error_msg}")
                 raise PLCConnectionError(error_msg)
             
             logger.info(f"   Attempt {attempts}/{max_attempts if max_attempts > 0 else '∞'}, retrying in {self.reconnect_delay}s...")
@@ -198,7 +198,7 @@ class PLC:
             return self.parsers[type_data](raw)
 
         except (Snap7Exception, RuntimeError) as e:
-            logger.warning(f"⚠️ Read failed (DB{db_number}.{start}): {e}")
+            logger.warning(f"Read failed (DB{db_number}.{start}): {e}")
             # Не сбрасываем статус при первой ошибке - может быть временной
             # self.connected = False
 
@@ -215,7 +215,7 @@ class PLC:
                 raise PLCReadError(f"Failed to read DB{db_number}.{start} after retry: {retry_err}")
         
         except Exception as e:
-            logger.error(f"❌ Unexpected read error (DB{db_number}.{start}): {e}")
+            logger.error(f"Unexpected read error (DB{db_number}.{start}): {e}")
             self.connected = False
             raise PLCReadError(f"Unexpected error reading DB{db_number}.{start}: {e}")
 
