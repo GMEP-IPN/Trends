@@ -17,6 +17,7 @@ from pathlib import Path
 # Добавляем корень проекта в путь
 sys.path.insert(0, str(Path(__file__).parent))
 
+from app import __version__
 from app.config.config_loader import load_config, setup_logging, get_logger
 from app.storage import init_db, get_session, PLC, Tag, TrendData
 from app.services.collector_manager import CollectorManager, collector_status
@@ -256,7 +257,7 @@ def run_collector(config, simulate=False):
     mode = "SIMULATION" if simulate else "PRODUCTION"
     
     print("\n" + "="*60)
-    print(f"📊 Trends Collector [{mode}]")
+    print(f"📊 Trends v{__version__} [{mode}]")
     print(f"🌐 Web interface: http://{config.api_host}:{config.api_port}")
     print(f"⌨️  Press Ctrl+C to stop")
     print("="*60 + "\n")

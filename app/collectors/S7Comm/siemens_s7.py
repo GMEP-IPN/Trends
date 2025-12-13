@@ -164,7 +164,7 @@ class PLC:
         
         return True
 
-    def read_db(self, db_number: int, start: int, size: int, type_data: str) -> Any:
+    def read_db(self, db_number: int, start: int, size: int, type_data: str, bit_number: int = 0) -> Any:
         """
         Чтение данных из DB с автопереподключением.
         
@@ -173,6 +173,7 @@ class PLC:
             start: Начальный адрес (байт)
             size: Размер данных (байт)
             type_data: Тип данных (int, dint, real, word, dword, bool, string)
+            bit_number: Номер бита (0-7, только для bool)
             
         Returns:
             Значение указанного типа
@@ -191,6 +192,9 @@ class PLC:
 
         try:
             raw = self.client.db_read(db_number, start, size)
+            # Для bool используем указанный номер бита
+            if type_data == "bool":
+                return get_bool(raw, 0, bit_number)
             return self.parsers[type_data](raw)
 
         except (Snap7Exception, RuntimeError) as e:
@@ -202,6 +206,8 @@ class PLC:
             try:
                 self.ensure_connection(timeout_attempts=3)
                 raw = self.client.db_read(db_number, start, size)
+                if type_data == "bool":
+                    return get_bool(raw, 0, bit_number)
                 return self.parsers[type_data](raw)
             except (PLCConnectionError, Snap7Exception, RuntimeError) as retry_err:
                 # Сбрасываем статус только если вторая попытка тоже провалилась

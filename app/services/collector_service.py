@@ -1,18 +1,30 @@
 """
 Сервис сбора данных с ПЛК.
 Автоматически опрашивает теги и записывает значения в БД.
+Поддерживает Siemens S7 и Allen-Bradley контроллеры.
 """
 import threading
 import time
 import logging
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, Optional, Union, Any
 from dataclasses import dataclass
 
 from app.storage import get_session, PLC, Tag, TrendData
+from app.storage.models import PLC_TYPE_SIEMENS_S7, PLC_TYPE_ALLEN_BRADLEY
 from app.collectors.S7Comm.siemens_s7 import PLC as S7Client, PLCConnectionError, PLCReadError
 from app.config.settings import BATCH_INSERT_SIZE
 from app.services.trend_service import cleanup_old_data
+
+# Пытаемся импортировать Allen-Bradley клиент
+try:
+    from app.collectors.EtherNetIP.allen_bradley import ABClient, ABConnectionError, ABReadError
+    AB_AVAILABLE = True
+except ImportError:
+    AB_AVAILABLE = False
+    ABClient = None
+    ABConnectionError = PLCConnectionError
+    ABReadError = PLCReadError
 
 logger = logging.getLogger('trends')
 
@@ -27,17 +39,30 @@ class TagValue:
 
 
 class PLCConnection:
-    """Обёртка для подключения к ПЛК с привязанными тегами"""
+    """Обёртка для подключения к ПЛК с привязанными тегами. Поддерживает разные типы ПЛК."""
     
     def __init__(self, plc_config: PLC):
         self.plc_id = plc_config.id
         self.name = plc_config.name
-        self.client = S7Client(
-            plc_ip=plc_config.ip_address,
-            tcp_port=plc_config.tcp_port,
-            rack=plc_config.rack,
-            slot=plc_config.slot
-        )
+        self.plc_type = getattr(plc_config, 'plc_type', PLC_TYPE_SIEMENS_S7)
+        
+        # Создаём клиент в зависимости от типа ПЛК
+        if self.plc_type == PLC_TYPE_ALLEN_BRADLEY:
+            if not AB_AVAILABLE:
+                raise RuntimeError("Allen-Bradley support not available. Install pycomm3: pip install pycomm3")
+            self.client = ABClient(
+                plc_ip=plc_config.ip_address,
+                slot=getattr(plc_config, 'slot_ab', 0)
+            )
+        else:
+            # По умолчанию Siemens S7
+            self.client = S7Client(
+                plc_ip=plc_config.ip_address,
+                tcp_port=plc_config.tcp_port,
+                rack=plc_config.rack,
+                slot=plc_config.slot
+            )
+        
         self.tags: Dict[int, Tag] = {}  # tag_id -> Tag
         self.last_poll: Dict[int, datetime] = {}  # tag_id -> last poll time
     
@@ -56,18 +81,20 @@ class PLCConnection:
     
     def poll_tag(self, tag: Tag) -> Optional[TagValue]:
         """
-        Опрос одного тега.
+        Опрос одного тега. Автоматически выбирает метод чтения в зависимости от типа ПЛК.
         
         Returns:
             TagValue с данными или None если не удалось прочитать
         """
         try:
-            value = self.client.read_db(
-                db_number=tag.db_number,
-                start=tag.start_address,
-                size=tag.data_size,
-                type_data=tag.data_type
-            )
+            # Выбираем метод чтения в зависимости от типа ПЛК
+            if self.plc_type == PLC_TYPE_ALLEN_BRADLEY:
+                value = self._read_ab_tag(tag)
+            else:
+                value = self._read_s7_tag(tag)
+            
+            if value is None:
+                return None
             
             # Validate value
             float_value = float(value)
@@ -79,7 +106,6 @@ class PLCConnection:
                 return None
             
             # Check for extreme values (likely garbage data)
-            # REAL type has range ~±3.4e38, but practical values rarely exceed ±1e6
             if abs(float_value) > 1e9:
                 logger.warning(f"⚠️ Extreme value {float_value} for tag {tag.name}, skipping")
                 return None
@@ -92,10 +118,10 @@ class PLCConnection:
                 timestamp=datetime.now(),
                 quality=192  # Good (OPC standard)
             )
-        except PLCReadError as e:
+        except (PLCReadError, ABReadError) as e:
             logger.warning(f"⚠️ Read error for tag {tag.name}: {e}")
             return None
-        except PLCConnectionError as e:
+        except (PLCConnectionError, ABConnectionError) as e:
             logger.error(f"❌ Connection error for tag {tag.name}: {e}")
             return None
         except ValueError as e:
@@ -104,6 +130,25 @@ class PLCConnection:
         except Exception as e:
             logger.error(f"❌ Unexpected error polling tag {tag.name}: {e}")
             return None
+    
+    def _read_s7_tag(self, tag: Tag) -> Optional[Any]:
+        """Чтение тега Siemens S7"""
+        return self.client.read_db(
+            db_number=tag.db_number,
+            start=tag.start_address,
+            size=tag.data_size,
+            type_data=tag.data_type,
+            bit_number=getattr(tag, 'bit_number', 0)
+        )
+    
+    def _read_ab_tag(self, tag: Tag) -> Optional[Any]:
+        """Чтение тега Allen-Bradley"""
+        # Для AB используем имя тега
+        ab_tag_name = getattr(tag, 'ab_tag_name', None)
+        if not ab_tag_name:
+            logger.error(f"❌ No AB tag name configured for tag {tag.name}")
+            return None
+        return self.client.read_tag(ab_tag_name)
 
 
 class CollectorService:
@@ -145,8 +190,15 @@ class CollectorService:
             plcs = session.query(PLC).filter(PLC.is_active == True).all()
             
             for plc in plcs:
-                print(f"  📡 Loading PLC: {plc.name} @ {plc.ip_address}:{plc.tcp_port}")
-                conn = PLCConnection(plc)
+                plc_type = getattr(plc, 'plc_type', PLC_TYPE_SIEMENS_S7)
+                type_label = "AB" if plc_type == PLC_TYPE_ALLEN_BRADLEY else "S7"
+                print(f"  📡 Loading PLC [{type_label}]: {plc.name} @ {plc.ip_address}:{plc.tcp_port}")
+                
+                try:
+                    conn = PLCConnection(plc)
+                except RuntimeError as e:
+                    print(f"  ❌ Failed to create connection for '{plc.name}': {e}")
+                    continue
                 
                 # Загружаем активные теги для этого ПЛК
                 tags = session.query(Tag).filter(
@@ -155,18 +207,21 @@ class CollectorService:
                 ).all()
                 
                 for tag in tags:
-                    # Делаем detached копию тега
-                    conn.add_tag(Tag(
+                    # Делаем detached копию тега с учётом всех полей
+                    tag_copy = Tag(
                         id=tag.id,
                         plc_id=tag.plc_id,
                         name=tag.name,
                         db_number=tag.db_number,
                         start_address=tag.start_address,
+                        bit_number=tag.bit_number,
                         data_type=tag.data_type,
                         data_size=tag.data_size,
+                        ab_tag_name=getattr(tag, 'ab_tag_name', None),  # Allen-Bradley tag name
                         poll_interval_ms=tag.poll_interval_ms,
                         is_active=tag.is_active
-                    ))
+                    )
+                    conn.add_tag(tag_copy)
                 
                 self.connections[plc.id] = conn
                 print(f"  ✅ PLC '{plc.name}' loaded with {len(tags)} tags")

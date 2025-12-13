@@ -59,6 +59,7 @@ import pystray
 from PIL import Image, ImageDraw, ImageFont
 from pystray import MenuItem as item
 
+from app import __version__
 from app.config.config_loader import load_config, setup_logging, get_logger
 from app.storage import init_db, get_session, PLC
 from app.services.collector_manager import CollectorManager, collector_status
@@ -243,7 +244,7 @@ class TrendsApp:
         self.icon = pystray.Icon(
             "Trends",
             icon_image,
-            "Trends - Запуск...",
+            f"Trends v{__version__} - Запуск...",
             menu=self.create_menu()
         )
         
@@ -256,7 +257,7 @@ class TrendsApp:
             time.sleep(2)
             while self.icon._running:
                 status = self.get_status_text()
-                self.icon.title = f"Trends - {status}"
+                self.icon.title = f"Trends v{__version__} - {status}"
                 time.sleep(2)
         
         tooltip_thread = threading.Thread(target=update_tooltip, daemon=True)

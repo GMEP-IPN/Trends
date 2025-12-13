@@ -18,7 +18,9 @@ if getattr(sys, 'frozen', False):
 else:
     _BASE_DIR = Path(__file__).parent.parent.parent
 
+from app import __version__
 from app.storage import get_session, PLC, Tag, TrendData
+from app.storage.models import PLC_TYPE_SIEMENS_S7, PLC_TYPE_ALLEN_BRADLEY, PLC_TYPES
 from app.services.trend_service import (
     get_trend_data, 
     get_latest_value,
@@ -31,7 +33,7 @@ from app.services.collector_manager import collector_status
 app = FastAPI(
     title="Trends Collector API",
     description="API для просмотра трендов с ПЛК",
-    version="1.0.0"
+    version=__version__
 )
 
 # Статические файлы
@@ -45,10 +47,12 @@ app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 class PLCResponse(BaseModel):
     id: int
     name: str
+    plc_type: str  # siemens_s7 или allen_bradley
     ip_address: str
     tcp_port: int
     rack: int
     slot: int
+    slot_ab: int = 0  # Для Allen-Bradley
     is_active: bool
     tag_count: int
 
@@ -57,9 +61,13 @@ class TagResponse(BaseModel):
     id: int
     name: str
     description: Optional[str]
-    db_number: int
-    start_address: int
+    # Siemens S7 addressing (nullable for AB)
+    db_number: Optional[int] = None
+    start_address: Optional[int] = None
+    bit_number: int = 0
     data_type: str
+    # Allen-Bradley addressing
+    ab_tag_name: Optional[str] = None
     poll_interval_ms: int
     latest_value: Optional[float]
     latest_time: Optional[str]
@@ -80,6 +88,7 @@ class StatisticsResponse(BaseModel):
 
 
 class SystemStatusResponse(BaseModel):
+    version: str
     plc_count: int
     tag_count: int
     trend_count: int
@@ -108,10 +117,14 @@ def get_data_size(data_type: str) -> int:
 class TagCreateRequest(BaseModel):
     name: str
     description: Optional[str] = ""
-    db_number: int
-    start_address: int
-    data_type: str  # int, dint, real, bool, word
+    # Siemens S7 addressing (optional for AB)
+    db_number: Optional[int] = None
+    start_address: Optional[int] = None
+    bit_number: int = 0  # Номер бита (0-7, только для BOOL)
+    data_type: str = "real"  # int, dint, real, bool, word
     data_size: Optional[int] = None  # Опционально - автоопределение по типу
+    # Allen-Bradley addressing
+    ab_tag_name: Optional[str] = None  # Имя тега в AB ПЛК
     poll_interval_ms: int = 1000
     plc_id: Optional[int] = None  # Если не указан, берём первый активный ПЛК
     
@@ -127,15 +140,15 @@ class TagCreateRequest(BaseModel):
     
     @field_validator('db_number')
     @classmethod
-    def validate_db_number(cls, v: int) -> int:
-        if not 1 <= v <= 65535:
+    def validate_db_number(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and not 1 <= v <= 65535:
             raise ValueError('DB number must be between 1 and 65535')
         return v
     
     @field_validator('start_address')
     @classmethod
-    def validate_start_address(cls, v: int) -> int:
-        if not 0 <= v <= 65535:
+    def validate_start_address(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and not 0 <= v <= 65535:
             raise ValueError('Start address must be between 0 and 65535')
         return v
     
@@ -154,6 +167,22 @@ class TagCreateRequest(BaseModel):
         if not 100 <= v <= 60000:
             raise ValueError('Poll interval must be between 100ms and 60000ms')
         return v
+    
+    @field_validator('bit_number')
+    @classmethod
+    def validate_bit_number(cls, v: int) -> int:
+        if not 0 <= v <= 7:
+            raise ValueError('Bit number must be between 0 and 7')
+        return v
+    
+    @field_validator('ab_tag_name')
+    @classmethod
+    def validate_ab_tag_name(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v = v.strip()
+            if len(v) > 255:
+                raise ValueError('AB tag name too long (max 255 characters)')
+        return v
 
 
 class TagCreateResponse(BaseModel):
@@ -164,10 +193,14 @@ class TagCreateResponse(BaseModel):
 
 class PLCCreateRequest(BaseModel):
     name: str
+    plc_type: str = PLC_TYPE_SIEMENS_S7  # siemens_s7 или allen_bradley
     ip_address: str
     tcp_port: int = 102
+    # Siemens S7 specific
     rack: int = 0
     slot: int = 2
+    # Allen-Bradley specific
+    slot_ab: int = 0
     
     @field_validator('name')
     @classmethod
@@ -179,6 +212,14 @@ class PLCCreateRequest(BaseModel):
             raise ValueError('Name too long (max 100 characters)')
         if not re.match(r'^[\w\s\-\.]+$', v):
             raise ValueError('Name contains invalid characters')
+        return v
+    
+    @field_validator('plc_type')
+    @classmethod
+    def validate_plc_type(cls, v: str) -> str:
+        v = v.lower().strip()
+        if v not in PLC_TYPES:
+            raise ValueError(f'Invalid PLC type. Must be one of: {", ".join(PLC_TYPES)}')
         return v
     
     @field_validator('ip_address')
@@ -210,6 +251,13 @@ class PLCCreateRequest(BaseModel):
     def validate_slot(cls, v: int) -> int:
         if not 0 <= v <= 31:
             raise ValueError('Slot must be between 0 and 31')
+        return v
+    
+    @field_validator('slot_ab')
+    @classmethod
+    def validate_slot_ab(cls, v: int) -> int:
+        if not 0 <= v <= 16:
+            raise ValueError('AB Slot must be between 0 and 16')
         return v
 
 
@@ -251,6 +299,7 @@ async def get_status():
             conn_status = "stopped"
         
         return SystemStatusResponse(
+            version=__version__,
             plc_count=plc_count,
             tag_count=tag_count,
             trend_count=trend_count,
@@ -276,10 +325,12 @@ async def list_plcs():
             result.append(PLCResponse(
                 id=plc.id,
                 name=plc.name,
+                plc_type=getattr(plc, 'plc_type', PLC_TYPE_SIEMENS_S7),
                 ip_address=plc.ip_address,
                 tcp_port=plc.tcp_port,
                 rack=plc.rack,
                 slot=plc.slot,
+                slot_ab=getattr(plc, 'slot_ab', 0),
                 is_active=plc.is_active,
                 tag_count=tag_count
             ))
@@ -296,12 +347,19 @@ async def create_plc(request: PLCCreateRequest):
         if existing:
             raise HTTPException(status_code=400, detail=f"PLC '{request.name}' already exists")
         
+        # Установка порта по умолчанию в зависимости от типа
+        tcp_port = request.tcp_port
+        if tcp_port == 102 and request.plc_type == PLC_TYPE_ALLEN_BRADLEY:
+            tcp_port = 44818  # Порт EtherNet/IP по умолчанию
+        
         plc = PLC(
             name=request.name,
+            plc_type=request.plc_type,
             ip_address=request.ip_address,
-            tcp_port=request.tcp_port,
+            tcp_port=tcp_port,
             rack=request.rack,
             slot=request.slot,
+            slot_ab=request.slot_ab,
             is_active=True
         )
         session.add(plc)
@@ -313,7 +371,7 @@ async def create_plc(request: PLCCreateRequest):
         return PLCCreateResponse(
             id=plc.id,
             name=plc.name,
-            message=f"PLC '{plc.name}' created successfully"
+            message=f"PLC '{plc.name}' ({request.plc_type}) created successfully"
         )
 
 
@@ -333,10 +391,12 @@ async def update_plc(plc_id: int, request: PLCCreateRequest):
                 raise HTTPException(status_code=400, detail=f"PLC '{request.name}' already exists")
         
         plc.name = request.name
+        plc.plc_type = request.plc_type
         plc.ip_address = request.ip_address
         plc.tcp_port = request.tcp_port
         plc.rack = request.rack
         plc.slot = request.slot
+        plc.slot_ab = request.slot_ab
         
         # Автоматический перезапуск коллектора
         collector_status.request_restart()
@@ -396,7 +456,9 @@ async def list_tags(plc_id: Optional[int] = None):
                 description=tag.description,
                 db_number=tag.db_number,
                 start_address=tag.start_address,
+                bit_number=tag.bit_number or 0,
                 data_type=tag.data_type,
+                ab_tag_name=getattr(tag, 'ab_tag_name', None),
                 poll_interval_ms=tag.poll_interval_ms,
                 latest_value=latest[1] if latest else None,
                 latest_time=latest[0].isoformat() if latest else None
@@ -414,7 +476,7 @@ async def get_tag_trend(
     end_time = datetime.now()
     start_time = end_time - timedelta(minutes=minutes)
     
-    data = get_trend_data(tag_id, start_time, end_time, limit=1000)
+    data = get_trend_data(tag_id, start_time, end_time, limit=5000)
     
     return [
         TrendPointResponse(
@@ -448,7 +510,7 @@ async def get_all_trends(
         
         result = []
         for tag in tags:
-            data = get_trend_data(tag.id, start_time, end_time, limit=1000)
+            data = get_trend_data(tag.id, start_time, end_time, limit=5000)
             result.append(TagTrendResponse(
                 tag_id=tag.id,
                 tag_name=tag.name,
@@ -502,53 +564,89 @@ async def create_tag(request: TagCreateRequest):
         if not plc:
             raise HTTPException(status_code=404, detail="No active PLC found")
         
-        # Проверяем уникальность адреса
-        existing = session.query(Tag).filter(
-            Tag.plc_id == plc.id,
-            Tag.db_number == request.db_number,
-            Tag.start_address == request.start_address
-        ).first()
+        plc_type = getattr(plc, 'plc_type', PLC_TYPE_SIEMENS_S7)
         
-        if existing:
-            if existing.is_active:
+        # Валидация в зависимости от типа ПЛК
+        if plc_type == PLC_TYPE_ALLEN_BRADLEY:
+            # Для Allen-Bradley требуется имя тега
+            if not request.ab_tag_name:
+                raise HTTPException(status_code=400, detail="AB tag name is required for Allen-Bradley PLC")
+            
+            # Проверяем уникальность AB тега
+            existing = session.query(Tag).filter(
+                Tag.plc_id == plc.id,
+                Tag.ab_tag_name == request.ab_tag_name
+            ).first()
+            
+            if existing and existing.is_active:
                 raise HTTPException(
                     status_code=400, 
-                    detail=f"Tag at DB{request.db_number}.{request.start_address} already exists"
+                    detail=f"Tag '{request.ab_tag_name}' already exists"
                 )
+            
+            address_str = request.ab_tag_name
+        else:
+            # Для Siemens S7 требуются DB и адрес
+            if request.db_number is None or request.start_address is None:
+                raise HTTPException(status_code=400, detail="DB number and start address are required for Siemens S7 PLC")
+            
+            # Проверяем уникальность адреса S7
+            query = session.query(Tag).filter(
+                Tag.plc_id == plc.id,
+                Tag.db_number == request.db_number,
+                Tag.start_address == request.start_address
+            )
+            
+            if request.data_type == 'bool':
+                query = query.filter(Tag.bit_number == request.bit_number)
+                address_str = f"DB{request.db_number}.DBX{request.start_address}.{request.bit_number}"
             else:
-                # Реактивируем существующий тег
-                existing.name = request.name
-                existing.description = request.description
-                existing.data_type = request.data_type
-                existing.data_size = get_data_size(request.data_type)  # Автоопределение размера
-                existing.poll_interval_ms = request.poll_interval_ms
-                existing.is_active = True
-                
-                # Автоматический перезапуск коллектора
-                collector_status.request_restart()
-                
-                return TagCreateResponse(
-                    id=existing.id,
-                    name=existing.name,
-                    message="Tag reactivated"
+                address_str = f"DB{request.db_number}.{request.start_address}"
+            
+            existing = query.first()
+            
+            if existing and existing.is_active:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Tag at {address_str} already exists"
                 )
         
-        # Создаём тег (размер автоматически по типу)
+        # Реактивация существующего тега
+        if existing and not existing.is_active:
+            existing.name = request.name
+            existing.description = request.description
+            existing.bit_number = request.bit_number if request.data_type == 'bool' else 0
+            existing.data_type = request.data_type
+            existing.data_size = get_data_size(request.data_type)
+            existing.ab_tag_name = request.ab_tag_name
+            existing.poll_interval_ms = request.poll_interval_ms
+            existing.is_active = True
+            
+            collector_status.request_restart()
+            
+            return TagCreateResponse(
+                id=existing.id,
+                name=existing.name,
+                message="Tag reactivated"
+            )
+        
+        # Создаём новый тег
         tag = Tag(
             plc_id=plc.id,
             name=request.name,
             description=request.description,
             db_number=request.db_number,
             start_address=request.start_address,
+            bit_number=request.bit_number if request.data_type == 'bool' else 0,
             data_type=request.data_type,
-            data_size=get_data_size(request.data_type),  # Автоопределение размера
+            data_size=get_data_size(request.data_type) if request.db_number else None,
+            ab_tag_name=request.ab_tag_name,
             poll_interval_ms=request.poll_interval_ms,
             is_active=True
         )
         session.add(tag)
         session.flush()
         
-        # Автоматический перезапуск коллектора
         collector_status.request_restart()
         
         return TagCreateResponse(
@@ -560,19 +658,25 @@ async def create_tag(request: TagCreateRequest):
 
 @app.delete("/api/tags/{tag_id}")
 async def delete_tag(tag_id: int):
-    """Удаление тега (деактивация)"""
+    """Полное удаление тега и его данных из БД"""
     with get_session() as session:
         tag = session.query(Tag).filter(Tag.id == tag_id).first()
         
         if not tag:
             raise HTTPException(status_code=404, detail="Tag not found")
         
-        tag.is_active = False
+        tag_name = tag.name
+        
+        # Удаляем все данные тренда для этого тега
+        deleted_trends = session.query(TrendData).filter(TrendData.tag_id == tag_id).delete()
+        
+        # Удаляем сам тег
+        session.delete(tag)
         
         # Автоматический перезапуск коллектора
         collector_status.request_restart()
         
-        return {"message": f"Tag '{tag.name}' deleted", "id": tag_id}
+        return {"message": f"Tag '{tag_name}' and {deleted_trends} trend records deleted", "id": tag_id}
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8000):

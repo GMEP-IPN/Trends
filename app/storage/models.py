@@ -7,6 +7,12 @@ from sqlalchemy.orm import relationship, declarative_base
 
 Base = declarative_base()
 
+# Типы ПЛК
+PLC_TYPE_SIEMENS_S7 = "siemens_s7"
+PLC_TYPE_ALLEN_BRADLEY = "allen_bradley"
+
+PLC_TYPES = [PLC_TYPE_SIEMENS_S7, PLC_TYPE_ALLEN_BRADLEY]
+
 
 class PLC(Base):
     """Конфигурация ПЛК"""
@@ -14,10 +20,17 @@ class PLC(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False, unique=True)
+    plc_type = Column(String(50), default=PLC_TYPE_SIEMENS_S7, nullable=False)  # siemens_s7 или allen_bradley
     ip_address = Column(String(45), nullable=False)
     tcp_port = Column(Integer, default=102)
+    
+    # Siemens S7 specific
     rack = Column(Integer, default=0)
     slot = Column(Integer, default=1)
+    
+    # Allen-Bradley specific
+    slot_ab = Column(Integer, default=0)  # Slot для ControlLogix (обычно 0)
+    
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -25,7 +38,7 @@ class PLC(Base):
     tags = relationship("Tag", back_populates="plc", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<PLC {self.name} ({self.ip_address})>"
+        return f"<PLC {self.name} ({self.plc_type}: {self.ip_address})>"
 
 
 class Tag(Base):
@@ -38,11 +51,15 @@ class Tag(Base):
     name = Column(String(100), nullable=False)
     description = Column(String(255))
     
-    # Адресация S7
-    db_number = Column(Integer, nullable=False)
-    start_address = Column(Integer, nullable=False)  # Байтовое смещение
-    data_type = Column(String(20), nullable=False)   # int, dint, real, bool, etc.
-    data_size = Column(Integer, nullable=False)      # Размер в байтах
+    # Адресация S7 (опционально - только для Siemens)
+    db_number = Column(Integer, nullable=True)        # NULL для Allen-Bradley
+    start_address = Column(Integer, nullable=True)    # NULL для Allen-Bradley
+    bit_number = Column(Integer, default=0)           # Номер бита (0-7, только для BOOL в S7)
+    data_type = Column(String(20), nullable=False)    # int, dint, real, bool, etc.
+    data_size = Column(Integer, nullable=True)        # Размер в байтах (NULL для AB)
+    
+    # Адресация Allen-Bradley (опционально - только для AB)
+    ab_tag_name = Column(String(255), nullable=True)  # Имя тега в ПЛК (например "Program:MainProgram.MyTag")
     
     # Настройки опроса
     poll_interval_ms = Column(Integer, default=1000)  # Интервал опроса в мс
@@ -54,12 +71,15 @@ class Tag(Base):
     plc = relationship("PLC", back_populates="tags")
     trend_data = relationship("TrendData", back_populates="tag", cascade="all, delete-orphan")
 
-    # Уникальность: один тег на адрес в рамках ПЛК
+    # Индекс для поиска (без unique, т.к. AB теги не имеют db_number/start_address)
     __table_args__ = (
-        Index("ix_tag_plc_address", "plc_id", "db_number", "start_address", unique=True),
+        Index("ix_tag_plc_address_bit", "plc_id", "db_number", "start_address", "bit_number"),
+        Index("ix_tag_plc_ab_tag", "plc_id", "ab_tag_name"),
     )
 
     def __repr__(self):
+        if self.ab_tag_name:
+            return f"<Tag {self.name} (AB: {self.ab_tag_name})>"
         return f"<Tag {self.name} (DB{self.db_number}.DBW{self.start_address})>"
 
 
