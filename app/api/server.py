@@ -146,8 +146,8 @@ class TagCreateRequest(BaseModel):
     @classmethod
     def validate_memory_area(cls, v: str) -> str:
         v = v.upper().strip()
-        if v not in ['DB', 'I', 'Q', 'M']:
-            raise ValueError('Memory area must be one of: DB, I, Q, M')
+        if v not in ['DB', 'I', 'Q', 'M', 'T', 'C']:
+            raise ValueError('Memory area must be one of: DB, I, Q, M, T, C')
         return v
     
     @field_validator('db_number')
@@ -233,8 +233,8 @@ class TagUpdateRequest(BaseModel):
     def validate_memory_area(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
             v = v.upper().strip()
-            if v not in ['DB', 'I', 'Q', 'M']:
-                raise ValueError('Memory area must be one of: DB, I, Q, M')
+            if v not in ['DB', 'I', 'Q', 'M', 'T', 'C']:
+                raise ValueError('Memory area must be one of: DB, I, Q, M, T, C')
         return v
     
     @field_validator('db_number')

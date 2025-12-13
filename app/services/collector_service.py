@@ -138,6 +138,8 @@ class PLCConnection:
         """Чтение тега Siemens S7"""
         memory_area = getattr(tag, 'memory_area', None) or "DB"
         
+        logger.debug(f"Reading tag {tag.name}: area={memory_area}, db={tag.db_number}, addr={tag.start_address}")
+        
         return self.client.read_area(
             area=memory_area,
             db_number=tag.db_number or 0,
@@ -218,6 +220,7 @@ class CollectorService:
                         id=tag.id,
                         plc_id=tag.plc_id,
                         name=tag.name,
+                        memory_area=getattr(tag, 'memory_area', None) or 'DB',  # S7 memory area
                         db_number=tag.db_number,
                         start_address=tag.start_address,
                         bit_number=tag.bit_number,

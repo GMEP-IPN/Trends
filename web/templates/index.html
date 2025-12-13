@@ -1241,6 +1241,8 @@
                                 <option value="I">I (Inputs)</option>
                                 <option value="Q">Q (Outputs)</option>
                                 <option value="M">M (Markers)</option>
+                                <option value="T">T (Timers)</option>
+                                <option value="C">C (Counters)</option>
                             </select>
                         </div>
                         <div class="form-group" id="dbNumberGroup">
@@ -1422,10 +1424,14 @@
                     return `DB${tag.db_number}.${tag.data_type.toUpperCase()}${tag.start_address}`;
                 }
             } else {
-                // I, Q, M areas
+                // I, Q, M, T, C areas
                 if (tag.start_address !== null && tag.start_address !== undefined) {
                     if (tag.data_type === 'bool') {
                         return `${memoryArea}${tag.start_address}.${tag.bit_number || 0}`;
+                    }
+                    // T and C typically don't have type prefix
+                    if (memoryArea === 'T' || memoryArea === 'C') {
+                        return `${memoryArea}${tag.start_address}`;
                     }
                     const typePrefix = {'int': 'W', 'word': 'W', 'dint': 'D', 'dword': 'D', 'real': 'D'}[tag.data_type] || '';
                     return `${memoryArea}${typePrefix}${tag.start_address}`;

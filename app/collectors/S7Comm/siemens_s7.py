@@ -19,6 +19,8 @@ MEMORY_AREAS = {
     "I": Areas.PE,    # Process Inputs (0x81)
     "Q": Areas.PA,    # Process Outputs (0x82)
     "M": Areas.MK,    # Markers (0x83)
+    "T": Areas.TM,    # Timers (0x1D)
+    "C": Areas.CT,    # Counters (0x1C)
 }
 
 # Snap7 exception - may vary between versions

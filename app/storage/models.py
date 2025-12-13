@@ -18,8 +18,10 @@ S7_AREA_DB = "DB"   # Data Blocks
 S7_AREA_I = "I"     # Inputs (Входы)
 S7_AREA_Q = "Q"     # Outputs (Выходы)
 S7_AREA_M = "M"     # Markers (Маркеры)
+S7_AREA_T = "T"     # Timers (Таймеры)
+S7_AREA_C = "C"     # Counters (Счётчики)
 
-S7_MEMORY_AREAS = [S7_AREA_DB, S7_AREA_I, S7_AREA_Q, S7_AREA_M]
+S7_MEMORY_AREAS = [S7_AREA_DB, S7_AREA_I, S7_AREA_Q, S7_AREA_M, S7_AREA_T, S7_AREA_C]
 
 
 class PLC(Base):

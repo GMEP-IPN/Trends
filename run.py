@@ -30,6 +30,7 @@ _simulator_running = False
 def run_simulator(port: int = 2000, db_size: int = 2000, update_interval: float = 1.0):
     """
     Запуск симулятора в текущем потоке.
+    Поддерживает все области памяти S7: DB, I, Q, M
     
     Args:
         port: Порт симулятора (из config.yaml)
@@ -47,25 +48,42 @@ def run_simulator(port: int = 2000, db_size: int = 2000, update_interval: float 
     
     logger = get_logger()
     
+    # Размеры областей памяти
+    area_size = 256  # байт для I, Q, M
+    
     # Параметры симуляции
     base_temp = 22.0
     base_humidity = 45.0
     temperature = base_temp
     humidity = base_humidity
+    pressure = 760.0  # мм рт.ст.
     tick = 0
     
     # Генераторы для дополнительных адресов (плавные случайные значения)
-    extra_values = {}  # address -> current_value
+    extra_values = {}  # (area, address) -> current_value
     
+    # Создаём буферы для всех областей памяти S7
     db_data = (ctypes.c_ubyte * db_size)()
+    input_data = (ctypes.c_ubyte * area_size)()   # I (Inputs)
+    output_data = (ctypes.c_ubyte * area_size)()  # Q (Outputs)
+    marker_data = (ctypes.c_ubyte * area_size)()  # M (Markers)
+    timer_data = (ctypes.c_ubyte * area_size)()   # T (Timers)
+    counter_data = (ctypes.c_ubyte * area_size)() # C (Counters)
     
     srv = Server()
-    srv.register_area(SrvArea.DB, 1, db_data)
+    # Регистрируем все области памяти S7
+    srv.register_area(SrvArea.DB, 1, db_data)      # DB1
+    srv.register_area(SrvArea.PE, 0, input_data)   # I (Inputs) - index=0
+    srv.register_area(SrvArea.PA, 0, output_data)  # Q (Outputs) - index=0
+    srv.register_area(SrvArea.MK, 0, marker_data)  # M (Markers) - index=0
+    srv.register_area(SrvArea.TM, 0, timer_data)   # T (Timers) - index=0
+    srv.register_area(SrvArea.CT, 0, counter_data) # C (Counters) - index=0
     srv.start(port)
     
     logger.info(f"Room Simulator started on localhost:{port}")
-    logger.info("   DB1.0: Temperature, DB1.4: Humidity")
-    logger.info("   Other addresses: random values 30-70")
+    logger.info("   DB1: Temperature, Humidity")
+    logger.info("   I0: InputVoltage, Q0: OutputPower, M0: Pressure")
+    logger.info("   T0: Uptime, C0: CycleCount")
     
     _simulator_running = True
     
@@ -77,35 +95,59 @@ def run_simulator(port: int = 2000, db_size: int = 2000, update_interval: float 
             daily_variation = 2.0 * math.sin(tick * 0.01)
             noise = random.uniform(-0.3, 0.3)
             
-            # Плавное изменение температуры (адрес 0)
+            # === DB1: Temperature & Humidity ===
             target = base_temp + daily_variation
             temperature += (target - temperature) * 0.05 + noise
             temperature = max(15.0, min(35.0, temperature))
             
-            # Влажность (адрес 4)
             humidity_target = 45.0 - (temperature - 22.0) * 2
             humidity += (humidity_target - humidity) * 0.1 + random.uniform(-1, 1)
             humidity = max(20.0, min(80.0, humidity))
             
-            # Записываем основные значения в DB1
             util.set_real(db_data, 0, round(temperature, 2))
             util.set_real(db_data, 4, round(humidity, 2))
             
-            # Заполняем ВСЕ адреса случайными значениями (30-70)
-            # Чтобы любой тег (даже с нестандартным адресом) получал данные
-            for addr in range(0, 200, 4):  # адреса 0, 4, 8, 12, ... 196
-                # Пропускаем адреса 0 и 4 - они уже заполнены
-                if addr == 0 or addr == 4:
-                    continue
+            # === I (Inputs): Voltage simulation ===
+            input_voltage = 220.0 + random.uniform(-5, 5) + 10 * math.sin(tick * 0.02)
+            util.set_real(input_data, 0, round(input_voltage, 2))
+            
+            # === Q (Outputs): Power output ===
+            output_power = max(0, temperature * 100 + random.uniform(-50, 50))
+            util.set_real(output_data, 0, round(output_power, 2))
+            
+            # === M (Markers): Pressure ===
+            pressure += random.uniform(-0.5, 0.5)
+            pressure = max(740, min(780, pressure))
+            util.set_real(marker_data, 0, round(pressure, 2))
+            
+            # === T (Timers): Uptime simulation ===
+            uptime = tick * update_interval  # секунды работы
+            util.set_real(timer_data, 0, round(uptime, 2))
+            
+            # === C (Counters): Cycle counter ===
+            cycle_count = float(tick % 10000)  # счётчик циклов
+            util.set_real(counter_data, 0, cycle_count)
+            
+            # Заполняем дополнительные адреса во всех областях
+            all_areas = [
+                ('DB', db_data, 8, 200),       # DB1: с адреса 8 (0,4 заняты)
+                ('I', input_data, 4, 64),      # DB2: с адреса 4
+                ('Q', output_data, 4, 64),     # DB3: с адреса 4
+                ('M', marker_data, 4, 64),     # DB4: с адреса 4
+                ('T', timer_data, 4, 64),      # DB5: с адреса 4
+                ('C', counter_data, 4, 64),    # DB6: с адреса 4
+            ]
+            
+            for area_name, area_data, start_addr, end_addr in all_areas:
+                for addr in range(start_addr, end_addr, 4):
+                    key = (area_name, addr)
+                    if key not in extra_values:
+                        extra_values[key] = random.uniform(30, 70)
                     
-                if addr not in extra_values:
-                    extra_values[addr] = random.uniform(30, 70)
-                
-                # Плавное изменение значения
-                extra_values[addr] += random.uniform(-1, 1)
-                extra_values[addr] = max(30, min(70, extra_values[addr]))
-                
-                util.set_real(db_data, addr, round(extra_values[addr], 2))
+                    extra_values[key] += random.uniform(-1, 1)
+                    extra_values[key] = max(30, min(70, extra_values[key]))
+                    
+                    util.set_real(area_data, addr, round(extra_values[key], 2))
             
             time.sleep(update_interval)
             
@@ -196,11 +238,13 @@ def run_collector(config, simulate=False):
                 session.add(sim_plc)
                 session.flush()
                 
-                # Добавляем теги симулятора
+                # Добавляем теги симулятора для всех областей памяти
+                # DB1: Temperature & Humidity
                 session.add(Tag(
                     plc_id=sim_plc.id,
                     name="RoomTemperature",
-                    description="Температура в комнате",
+                    description="Температура в комнате (DB1.REAL0)",
+                    memory_area="DB",
                     db_number=1,
                     start_address=0,
                     data_type="real",
@@ -211,7 +255,8 @@ def run_collector(config, simulate=False):
                 session.add(Tag(
                     plc_id=sim_plc.id,
                     name="RoomHumidity",
-                    description="Влажность в комнате",
+                    description="Влажность в комнате (DB1.REAL4)",
+                    memory_area="DB",
                     db_number=1,
                     start_address=4,
                     data_type="real",
@@ -219,7 +264,72 @@ def run_collector(config, simulate=False):
                     poll_interval_ms=1000,
                     is_active=True
                 ))
-                logger.info("SimPLC created with 2 tags")
+                # I (Inputs): Voltage
+                session.add(Tag(
+                    plc_id=sim_plc.id,
+                    name="InputVoltage",
+                    description="Напряжение на входе (I0)",
+                    memory_area="I",
+                    db_number=None,
+                    start_address=0,
+                    data_type="real",
+                    data_size=4,
+                    poll_interval_ms=1000,
+                    is_active=True
+                ))
+                # Q (Outputs): Power
+                session.add(Tag(
+                    plc_id=sim_plc.id,
+                    name="OutputPower",
+                    description="Мощность на выходе (Q0)",
+                    memory_area="Q",
+                    db_number=None,
+                    start_address=0,
+                    data_type="real",
+                    data_size=4,
+                    poll_interval_ms=1000,
+                    is_active=True
+                ))
+                # M (Markers): Pressure
+                session.add(Tag(
+                    plc_id=sim_plc.id,
+                    name="Pressure",
+                    description="Атмосферное давление (M0)",
+                    memory_area="M",
+                    db_number=None,
+                    start_address=0,
+                    data_type="real",
+                    data_size=4,
+                    poll_interval_ms=1000,
+                    is_active=True
+                ))
+                # T (Timers): Uptime
+                session.add(Tag(
+                    plc_id=sim_plc.id,
+                    name="Uptime",
+                    description="Время работы (T0)",
+                    memory_area="T",
+                    db_number=None,
+                    start_address=0,
+                    data_type="real",
+                    data_size=4,
+                    poll_interval_ms=1000,
+                    is_active=True
+                ))
+                # C (Counters): CycleCount
+                session.add(Tag(
+                    plc_id=sim_plc.id,
+                    name="CycleCount",
+                    description="Счётчик циклов (C0)",
+                    memory_area="C",
+                    db_number=None,
+                    start_address=0,
+                    data_type="real",
+                    data_size=4,
+                    poll_interval_ms=1000,
+                    is_active=True
+                ))
+                logger.info("SimPLC created with 7 tags (DB, I, Q, M, T, C)")
     
     # Запуск веб-сервера в отдельном потоке
     def run_web():
