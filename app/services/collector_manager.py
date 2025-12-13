@@ -58,7 +58,8 @@ class CollectorManager:
             if self.collector.connections:
                 any_connected = False
                 for plc_id, conn in self.collector.connections.items():
-                    is_connected = conn.client.connected
+                    # В режиме симуляции AB client может быть None
+                    is_connected = conn.client.connected if conn.client else True
                     collector_status.set_plc_status(plc_id, is_connected)
                     if is_connected:
                         any_connected = True
@@ -113,6 +114,13 @@ class CollectorManager:
             for plc_id, conn in self.collector.connections.items():
                 logger.info(f"Reconnecting to PLC '{conn.name}'...")
                 try:
+                    # В режиме симуляции AB client может быть None
+                    if conn.client is None:
+                        logger.info(f"  PLC '{conn.name}' in simulation mode - no reconnection needed")
+                        collector_status.set_plc_status(plc_id, True)
+                        any_connected = True
+                        continue
+                    
                     conn.client.connect()
                     is_connected = conn.client.connected
                     if is_connected:
@@ -157,7 +165,8 @@ class CollectorManager:
                 active_plc_ids = set(self.collector.connections.keys())
                 
                 for plc_id, conn in self.collector.connections.items():
-                    is_connected = conn.client.connected
+                    # В режиме симуляции AB client может быть None
+                    is_connected = conn.client.connected if conn.client else True
                     collector_status.set_plc_status(plc_id, is_connected)
                     if is_connected:
                         any_connected = True

@@ -16,6 +16,7 @@ from app.collectors.S7Comm.siemens_s7 import PLC as S7Client, PLCConnectionError
 from app.config.settings import BATCH_INSERT_SIZE
 from app.services.trend_service import cleanup_old_data
 from app.services.collector_status import collector_status
+from app.services.runtime_config import runtime_config
 
 # Пытаемся импортировать Allen-Bradley клиент
 try:
@@ -49,12 +50,16 @@ class PLCConnection:
         
         # Создаём клиент в зависимости от типа ПЛК
         if self.plc_type == PLC_TYPE_ALLEN_BRADLEY:
-            if not AB_AVAILABLE:
+            if runtime_config.simulate_mode:
+                # В режиме симуляции не нужен реальный клиент
+                self.client = None
+            elif not AB_AVAILABLE:
                 raise RuntimeError("Allen-Bradley support not available. Install pycomm3: pip install pycomm3")
-            self.client = ABClient(
-                plc_ip=plc_config.ip_address,
-                slot=getattr(plc_config, 'slot_ab', 0)
-            )
+            else:
+                self.client = ABClient(
+                    plc_ip=plc_config.ip_address,
+                    slot=getattr(plc_config, 'slot_ab', 0)
+                )
         else:
             # По умолчанию Siemens S7
             self.client = S7Client(
@@ -151,12 +156,68 @@ class PLCConnection:
     
     def _read_ab_tag(self, tag: Tag) -> Optional[Any]:
         """Чтение тега Allen-Bradley"""
+        # В режиме симуляции генерируем данные
+        if runtime_config.simulate_mode:
+            return self._simulate_ab_tag(tag)
+        
         # Для AB используем имя тега
         ab_tag_name = getattr(tag, 'ab_tag_name', None)
         if not ab_tag_name:
             logger.error(f"No AB tag name configured for tag {tag.name}")
             return None
         return self.client.read_tag(ab_tag_name)
+    
+    def _simulate_ab_tag(self, tag: Tag) -> Any:
+        """Генерация симулированных данных для AB тега"""
+        import math
+        import random
+        
+        # Получаем имя тега для определения паттерна
+        tag_name = getattr(tag, 'ab_tag_name', None) or tag.name
+        data_type = (tag.data_type or 'real').lower()
+        
+        # Текущее время для генерации волн
+        t = time.time()
+        
+        # Генерируем значение в зависимости от имени тега
+        if 'temp' in tag_name.lower():
+            # Температура: 20-30°C с синусоидальной вариацией
+            return 25.0 + 5.0 * math.sin(t / 30) + random.uniform(-0.5, 0.5)
+        elif 'pressure' in tag_name.lower():
+            # Давление: 750-770 мм рт.ст.
+            return 760.0 + 10.0 * math.sin(t / 45 + 1) + random.uniform(-1, 1)
+        elif 'flow' in tag_name.lower():
+            # Расход: 50-100 л/мин
+            return 75.0 + 25.0 * math.sin(t / 20) + random.uniform(-2, 2)
+        elif 'level' in tag_name.lower():
+            # Уровень: 0-100%
+            return 50.0 + 40.0 * math.sin(t / 60 + 2) + random.uniform(-1, 1)
+        elif 'speed' in tag_name.lower():
+            # Скорость: 0-1500 об/мин
+            return 750.0 + 500.0 * math.sin(t / 25 + 3) + random.uniform(-10, 10)
+        elif 'count' in tag_name.lower() or 'counter' in tag_name.lower():
+            # Счётчик: инкрементальное значение
+            return int(t) % 10000
+        elif 'running' in tag_name.lower() or 'status' in tag_name.lower():
+            # Булевый статус
+            return int(math.sin(t / 10) > 0)
+        elif 'motor' in tag_name.lower() or 'pump' in tag_name.lower():
+            # Булевый: двигатель/насос
+            return int(math.sin(t / 15) > -0.3)
+        elif 'alarm' in tag_name.lower():
+            # Редкие алармы
+            return int(random.random() < 0.05)
+        
+        # Для остальных тегов - генерируем по типу данных
+        if data_type in ('bool', 'boolean'):
+            return int(random.random() > 0.5)
+        elif data_type in ('int', 'sint', 'usint'):
+            return int(50 + 50 * math.sin(t / 10) + random.uniform(-5, 5))
+        elif data_type in ('dint', 'udint', 'lint'):
+            return int(1000 + 500 * math.sin(t / 20) + random.uniform(-20, 20))
+        else:
+            # REAL по умолчанию
+            return 50.0 + 30.0 * math.sin(t / 15) + random.uniform(-2, 2)
 
 
 class CollectorService:
@@ -328,6 +389,12 @@ class CollectorService:
         for plc_id, conn in self.connections.items():
             logger.info(f"Connecting to PLC '{conn.name}'...")
             try:
+                # В режиме симуляции AB не требует подключения
+                if conn.client is None:
+                    logger.info(f"  PLC '{conn.name}' in simulation mode - no connection needed")
+                    collector_status.set_plc_status(plc_id, True)
+                    continue
+                    
                 conn.client.connect()
                 if conn.client.connected:
                     collector_status.set_plc_status(plc_id, True)
@@ -356,7 +423,8 @@ class CollectorService:
         
         # Отключаемся от ПЛК
         for plc_id, conn in self.connections.items():
-            conn.client.disconnect()
+            if conn.client is not None:
+                conn.client.disconnect()
         
         logger.info("Collector Service stopped")
     
@@ -368,7 +436,7 @@ class CollectorService:
             "buffer_size": len(self.buffer),
             "connections": {
                 conn.name: {
-                    "connected": conn.client.connected,
+                    "connected": conn.client.connected if conn.client else True,  # Simulation mode
                     "tag_count": len(conn.tags)
                 }
                 for conn in self.connections.values()

@@ -204,6 +204,10 @@ def run_collector(config, simulate=False):
     
     logger = get_logger()
     
+    # Устанавливаем режим симуляции глобально
+    from app.services.runtime_config import runtime_config
+    runtime_config.simulate_mode = simulate
+    
     # Инициализируем БД
     logger.info("Initializing database...")
     init_db()
@@ -330,6 +334,69 @@ def run_collector(config, simulate=False):
                     is_active=True
                 ))
                 logger.info("SimPLC created with 7 tags (DB, I, Q, M, T, C)")
+            
+            # Создаём SimAB (Allen-Bradley) в режиме симуляции
+            sim_ab = session.query(PLC).filter(PLC.name == "SimAB").first()
+            if not sim_ab:
+                logger.info("Creating SimAB (Allen-Bradley) for simulation...")
+                sim_ab = PLC(
+                    name="SimAB",
+                    plc_type="allen_bradley",
+                    ip_address="127.0.0.1",  # Виртуальный IP для симуляции
+                    tcp_port=44818,  # Стандартный порт EtherNet/IP
+                    slot_ab=0,
+                    is_active=True
+                )
+                session.add(sim_ab)
+                session.flush()
+                
+                # Добавляем теги для Allen-Bradley симулятора
+                session.add(Tag(
+                    plc_id=sim_ab.id,
+                    name="Temperature",
+                    description="Simulated Temperature",
+                    ab_tag_name="Temperature",
+                    data_type="real",
+                    poll_interval_ms=1000,
+                    is_active=True
+                ))
+                session.add(Tag(
+                    plc_id=sim_ab.id,
+                    name="Pressure",
+                    description="Simulated Pressure",
+                    ab_tag_name="Pressure",
+                    data_type="real",
+                    poll_interval_ms=1000,
+                    is_active=True
+                ))
+                session.add(Tag(
+                    plc_id=sim_ab.id,
+                    name="FlowRate",
+                    description="Simulated Flow Rate",
+                    ab_tag_name="FlowRate",
+                    data_type="real",
+                    poll_interval_ms=1000,
+                    is_active=True
+                ))
+                session.add(Tag(
+                    plc_id=sim_ab.id,
+                    name="ProductCount",
+                    description="Simulated Product Counter",
+                    ab_tag_name="ProductCount",
+                    data_type="dint",
+                    poll_interval_ms=1000,
+                    is_active=True
+                ))
+                session.add(Tag(
+                    plc_id=sim_ab.id,
+                    name="Motor_Running",
+                    description="Motor Status",
+                    ab_tag_name="Motor_Running",
+                    data_type="bool",
+                    poll_interval_ms=1000,
+                    is_active=True
+                ))
+                logger.info("SimAB created with 5 tags")
     
     # Запуск веб-сервера в отдельном потоке
     def run_web():

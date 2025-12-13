@@ -582,6 +582,191 @@ async def restart_collector():
     return {"message": "Restart requested", "status": "pending"}
 
 
+@app.get("/api/plcs/{plc_id}/browse")
+async def browse_plc(plc_id: int, program: str = None):
+    """
+    Browse PLC - получить список тегов/блоков из ПЛК.
+    - Siemens S7: возвращает список Data Blocks и области памяти
+    - Allen-Bradley: возвращает полный список тегов из ПЛК
+    
+    Args:
+        program: (только для AB) '*' для всех тегов, имя программы, или None для controller-scope
+    """
+    with get_session() as session:
+        plc = session.query(PLC).filter(PLC.id == plc_id).first()
+        
+        if not plc:
+            raise HTTPException(status_code=404, detail="PLC not found")
+        
+        plc_type = getattr(plc, 'plc_type', PLC_TYPE_SIEMENS_S7)
+        
+        if plc_type == PLC_TYPE_ALLEN_BRADLEY:
+            return await _browse_allen_bradley(plc, program)
+        else:
+            return await _browse_siemens_s7(plc)
+
+
+async def _browse_siemens_s7(plc):
+    """Browse Siemens S7 PLC - get Data Blocks"""
+    try:
+        import snap7
+        from snap7.type import Block
+        
+        client = snap7.client.Client()
+        client.connect(plc.ip_address, plc.rack, plc.slot, plc.tcp_port)
+        
+        if not client.get_connected():
+            raise HTTPException(status_code=503, detail="Cannot connect to PLC")
+        
+        # Получаем общую информацию о блоках
+        blocks_info = client.list_blocks()
+        
+        # Получаем список DB
+        db_list = []
+        for db_num in range(1, 101):
+            try:
+                info = client.get_block_info(Block.DB, db_num)
+                db_list.append({
+                    "db_number": db_num,
+                    "size": info.MC7Size,
+                    "load_size": info.LoadSize if hasattr(info, 'LoadSize') else None
+                })
+            except Exception:
+                pass  # DB doesn't exist
+        
+        client.disconnect()
+        
+        return {
+            "plc_id": plc.id,
+            "plc_name": plc.name,
+            "plc_type": "siemens_s7",
+            "connected": True,
+            "blocks": {
+                "OB": blocks_info.OBCount,
+                "FB": blocks_info.FBCount,
+                "FC": blocks_info.FCCount,
+                "DB": blocks_info.DBCount,
+            },
+            "data_blocks": db_list,
+            "memory_areas": ["I", "Q", "M", "T", "C"],
+            "tags": []  # S7 не предоставляет имена тегов
+        }
+        
+    except ImportError:
+        raise HTTPException(status_code=500, detail="snap7 library not available")
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"PLC browse failed: {str(e)}")
+
+
+async def _browse_allen_bradley(plc, program: str = None):
+    """Browse Allen-Bradley PLC - get full tag list"""
+    from app.services.runtime_config import runtime_config
+    
+    # В режиме симуляции возвращаем фейковые теги
+    if runtime_config.simulate_mode:
+        return _get_simulated_ab_tags(plc)
+    
+    try:
+        from pycomm3 import LogixDriver
+        
+        # Формируем путь подключения
+        slot = getattr(plc, 'slot_ab', 0) or 0
+        if slot > 0:
+            path = f"{plc.ip_address}/{slot}"
+        else:
+            path = plc.ip_address
+        
+        with LogixDriver(path) as driver:
+            # Получаем список тегов
+            # program='*' - все теги, None - только controller-scope
+            tag_list = driver.get_tag_list(program=program or '*')
+            
+            # Форматируем теги для ответа
+            tags = []
+            for tag_info in tag_list:
+                tag_data = {
+                    "tag_name": tag_info.get('tag_name', ''),
+                    "data_type": str(tag_info.get('data_type', 'UNKNOWN')),
+                    "data_type_name": tag_info.get('data_type_name', ''),
+                    "dim": tag_info.get('dim', 0),  # размерность массива
+                    "external_access": tag_info.get('external_access', ''),
+                }
+                
+                # Добавляем размеры массива если есть
+                if tag_info.get('dimensions'):
+                    tag_data['dimensions'] = tag_info['dimensions']
+                
+                tags.append(tag_data)
+            
+            return {
+                "plc_id": plc.id,
+                "plc_name": plc.name,
+                "plc_type": "allen_bradley",
+                "connected": True,
+                "tag_count": len(tags),
+                "tags": tags,
+                "data_blocks": [],
+                "memory_areas": []
+            }
+            
+    except ImportError:
+        raise HTTPException(status_code=500, detail="pycomm3 library not installed. Run: pip install pycomm3")
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"PLC browse failed: {str(e)}")
+
+
+def _get_simulated_ab_tags(plc):
+    """Возвращает симулированные теги для Allen-Bradley PLC"""
+    # Симулированные теги с разными типами данных
+    simulated_tags = [
+        # Process variables
+        {"tag_name": "Temperature", "data_type": "REAL", "data_type_name": "REAL", "dim": 0},
+        {"tag_name": "Pressure", "data_type": "REAL", "data_type_name": "REAL", "dim": 0},
+        {"tag_name": "FlowRate", "data_type": "REAL", "data_type_name": "REAL", "dim": 0},
+        {"tag_name": "Level", "data_type": "REAL", "data_type_name": "REAL", "dim": 0},
+        {"tag_name": "Speed", "data_type": "REAL", "data_type_name": "REAL", "dim": 0},
+        
+        # Setpoints
+        {"tag_name": "TempSetpoint", "data_type": "REAL", "data_type_name": "REAL", "dim": 0},
+        {"tag_name": "PressureSetpoint", "data_type": "REAL", "data_type_name": "REAL", "dim": 0},
+        {"tag_name": "SpeedSetpoint", "data_type": "REAL", "data_type_name": "REAL", "dim": 0},
+        
+        # Counters and integers
+        {"tag_name": "ProductCount", "data_type": "DINT", "data_type_name": "DINT", "dim": 0},
+        {"tag_name": "BatchNumber", "data_type": "DINT", "data_type_name": "DINT", "dim": 0},
+        {"tag_name": "CycleCount", "data_type": "DINT", "data_type_name": "DINT", "dim": 0},
+        {"tag_name": "ErrorCode", "data_type": "INT", "data_type_name": "INT", "dim": 0},
+        {"tag_name": "Status", "data_type": "INT", "data_type_name": "INT", "dim": 0},
+        
+        # Boolean tags
+        {"tag_name": "Motor_Running", "data_type": "BOOL", "data_type_name": "BOOL", "dim": 0},
+        {"tag_name": "Pump_On", "data_type": "BOOL", "data_type_name": "BOOL", "dim": 0},
+        {"tag_name": "Alarm_Active", "data_type": "BOOL", "data_type_name": "BOOL", "dim": 0},
+        {"tag_name": "SystemReady", "data_type": "BOOL", "data_type_name": "BOOL", "dim": 0},
+        {"tag_name": "EmergencyStop", "data_type": "BOOL", "data_type_name": "BOOL", "dim": 0},
+        
+        # Arrays
+        {"tag_name": "TempArray", "data_type": "REAL", "data_type_name": "REAL", "dim": 1, "dimensions": [10]},
+        {"tag_name": "IOStatus", "data_type": "BOOL", "data_type_name": "BOOL", "dim": 1, "dimensions": [32]},
+        
+        # Program-scoped tags
+        {"tag_name": "Program:MainProgram.LocalVar1", "data_type": "REAL", "data_type_name": "REAL", "dim": 0},
+        {"tag_name": "Program:MainProgram.Counter", "data_type": "DINT", "data_type_name": "DINT", "dim": 0},
+        {"tag_name": "Program:MainProgram.Running", "data_type": "BOOL", "data_type_name": "BOOL", "dim": 0},
+    ]
+    
+    return {
+        "plc_id": plc.id,
+        "plc_name": plc.name,
+        "plc_type": "allen_bradley",
+        "connected": True,
+        "tag_count": len(simulated_tags),
+        "tags": simulated_tags,
+        "data_blocks": [],
+        "memory_areas": []
+    }
+
+
 @app.get("/api/tags", response_model=List[TagResponse])
 async def list_tags(plc_id: Optional[int] = None):
     """Список тегов с последними значениями (оптимизировано)"""

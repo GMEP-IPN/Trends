@@ -163,3 +163,5 @@ class TestGlobalCollectorStatus:
         assert status2.plc_name == "TestSingleton"
 
 
+
+

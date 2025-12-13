@@ -1151,7 +1151,10 @@
             <!-- Tags -->
             <div class="sidebar-header" style="margin-top: 1rem;">
                 <div class="sidebar-title">TAGs</div>
-                <button class="add-btn" onclick="openModal()" title="Add tag">+</button>
+                <div style="display: flex; gap: 0.25rem;">
+                    <button class="add-btn" onclick="browsePLC()" title="Browse PLC">🔍</button>
+                    <button class="add-btn" onclick="openModal()" title="Add tag">+</button>
+                </div>
             </div>
             <div class="tag-list" id="tagList">
                 <!-- Tags will be loaded here -->
@@ -1366,6 +1369,26 @@
                     <button type="submit" class="btn btn-primary" id="plcSubmitBtn">Add</button>
                 </div>
             </form>
+        </div>
+    </div>
+    
+    <!-- Browse PLC Modal -->
+    <div class="modal-overlay" id="browseModal">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3 class="modal-title">🔍 Browse PLC</h3>
+                <button class="modal-close" onclick="closeBrowseModal()">×</button>
+            </div>
+            
+            <div id="browseContent" style="max-height: 400px; overflow-y: auto;">
+                <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                    Connecting to PLC...
+                </div>
+            </div>
+            
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeBrowseModal()">Close</button>
+            </div>
         </div>
     </div>
     
@@ -2203,6 +2226,10 @@
             if (e.target === e.currentTarget) cancelPLCForm();
         });
         
+        document.getElementById('browseModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeBrowseModal();
+        });
+        
         // Close modal on Escape
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
@@ -2477,6 +2504,194 @@
             } catch (error) {
                 showToast('Network error', 'error');
             }
+        }
+        
+        // Browse PLC - get list of Data Blocks / Tags
+        async function browsePLC() {
+            if (!selectedPlcId) {
+                showToast('Please select a PLC first', 'error');
+                return;
+            }
+            
+            document.getElementById('browseModal').classList.add('active');
+            document.getElementById('browseContent').innerHTML = `
+                <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                    <div>⏳ Connecting to PLC...</div>
+                </div>
+            `;
+            
+            try {
+                const response = await fetch(`/api/plcs/${selectedPlcId}/browse`);
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    document.getElementById('browseContent').innerHTML = `
+                        <div style="text-align: center; padding: 2rem; color: var(--danger);">
+                            ❌ ${error.detail || 'Browse failed'}
+                        </div>
+                    `;
+                    return;
+                }
+                
+                const data = await response.json();
+                renderBrowseResults(data);
+                
+            } catch (error) {
+                document.getElementById('browseContent').innerHTML = `
+                    <div style="text-align: center; padding: 2rem; color: var(--danger);">
+                        ❌ Network error: ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        function renderBrowseResults(data) {
+            let html = `
+                <div style="margin-bottom: 1rem;">
+                    <strong>${data.plc_name}</strong> - Connected ✅
+                    <span style="color: var(--text-muted); font-size: 0.85rem; margin-left: 0.5rem;">
+                        (${data.plc_type === 'allen_bradley' ? 'Allen-Bradley' : 'Siemens S7'})
+                    </span>
+                </div>
+            `;
+            
+            // Allen-Bradley: показываем список тегов
+            if (data.plc_type === 'allen_bradley' && data.tags && data.tags.length > 0) {
+                html += `
+                    <div style="margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="font-weight: 500;">Tags (${data.tag_count})</div>
+                        <input type="text" id="browseTagFilter" placeholder="Filter tags..." 
+                               style="padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid var(--border); 
+                                      background: var(--bg-card); color: var(--text); font-size: 0.85rem; width: 150px;"
+                               oninput="filterBrowseTags()">
+                    </div>
+                    <div id="browseTagList" style="display: flex; flex-direction: column; gap: 0.25rem; max-height: 300px; overflow-y: auto;">
+                `;
+                
+                for (const tag of data.tags) {
+                    const dimStr = tag.dim > 0 ? `[${tag.dimensions ? tag.dimensions.join('][') : tag.dim}]` : '';
+                    html += `
+                        <div class="browse-tag-item" data-name="${tag.tag_name.toLowerCase()}" 
+                             style="display: flex; justify-content: space-between; align-items: center; 
+                                    padding: 0.5rem; background: var(--bg-card); border-radius: 6px; font-size: 0.85rem;">
+                            <div style="overflow: hidden;">
+                                <div style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" 
+                                     title="${tag.tag_name}">${tag.tag_name}${dimStr}</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">${tag.data_type_name || tag.data_type}</div>
+                            </div>
+                            <button class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; flex-shrink: 0;"
+                                    onclick="addABTagFromBrowse('${tag.tag_name.replace(/'/g, "\\'")}')">+ Add</button>
+                        </div>
+                    `;
+                }
+                
+                html += `</div>`;
+                
+                // Сохраняем данные для фильтрации
+                window.browseTagsData = data.tags;
+            }
+            // Siemens S7: показываем блоки
+            else if (data.blocks) {
+                html += `
+                    <div style="margin-bottom: 1rem; padding: 0.75rem; background: var(--bg-card); border-radius: 8px;">
+                        <div style="font-weight: 500; margin-bottom: 0.5rem;">Block Summary</div>
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; font-size: 0.85rem;">
+                            <div>OB: ${data.blocks.OB}</div>
+                            <div>FB: ${data.blocks.FB}</div>
+                            <div>FC: ${data.blocks.FC}</div>
+                            <div>DB: ${data.blocks.DB}</div>
+                        </div>
+                    </div>
+                `;
+                
+                // Data Blocks
+                if (data.data_blocks && data.data_blocks.length > 0) {
+                    html += `
+                        <div style="margin-bottom: 1rem;">
+                            <div style="font-weight: 500; margin-bottom: 0.5rem;">Data Blocks</div>
+                            <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                    `;
+                    
+                    for (const db of data.data_blocks) {
+                        html += `
+                            <div style="display: flex; justify-content: space-between; align-items: center; 
+                                        padding: 0.5rem; background: var(--bg-card); border-radius: 6px; font-size: 0.85rem;">
+                                <span><strong>DB${db.db_number}</strong> - ${db.size} bytes</span>
+                                <button class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;"
+                                        onclick="addTagFromBrowse('DB', ${db.db_number})">+ Add Tag</button>
+                            </div>
+                        `;
+                    }
+                    
+                    html += `</div></div>`;
+                }
+                
+                // Memory Areas
+                if (data.memory_areas && data.memory_areas.length > 0) {
+                    html += `
+                        <div style="margin-bottom: 1rem;">
+                            <div style="font-weight: 500; margin-bottom: 0.5rem;">Memory Areas</div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    `;
+                    
+                    const areaNames = {
+                        'I': 'Inputs',
+                        'Q': 'Outputs',
+                        'M': 'Markers',
+                        'T': 'Timers',
+                        'C': 'Counters'
+                    };
+                    
+                    for (const area of data.memory_areas) {
+                        html += `
+                            <button class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.85rem;"
+                                    onclick="addTagFromBrowse('${area}', null)">
+                                ${area} (${areaNames[area]})
+                            </button>
+                        `;
+                    }
+                    
+                    html += `</div></div>`;
+                }
+            }
+            
+            document.getElementById('browseContent').innerHTML = html;
+        }
+        
+        function filterBrowseTags() {
+            const filter = document.getElementById('browseTagFilter').value.toLowerCase();
+            const items = document.querySelectorAll('.browse-tag-item');
+            items.forEach(item => {
+                const name = item.dataset.name;
+                item.style.display = name.includes(filter) ? 'flex' : 'none';
+            });
+        }
+        
+        function addABTagFromBrowse(tagName) {
+            closeBrowseModal();
+            openModal();
+            
+            // Заполняем поле AB tag name
+            document.getElementById('tagABName').value = tagName;
+            document.getElementById('tagName').value = tagName.split('.').pop();  // Берём последнюю часть как имя
+        }
+        
+        function addTagFromBrowse(memoryArea, dbNumber) {
+            closeBrowseModal();
+            openModal();
+            
+            // Set memory area
+            document.getElementById('tagMemoryArea').value = memoryArea;
+            updateMemoryAreaUI();
+            
+            // Set DB number if provided
+            if (dbNumber !== null) {
+                document.getElementById('tagDbNumber').value = dbNumber;
+            }
+        }
+        
+        function closeBrowseModal() {
+            document.getElementById('browseModal').classList.remove('active');
         }
         
         // Same for tags
