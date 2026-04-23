@@ -1,10 +1,12 @@
 name: Build Windows EXE
 
 on:
-  workflow_dispatch:        # ручной запуск из GitHub UI
+  workflow_dispatch:
   push:
+    branches:
+      - master
     tags:
-      - 'v*'               # автозапуск при пуше тега v1.0, v2.3 и т.д.
+      - 'v*'
 
 jobs:
   build:
