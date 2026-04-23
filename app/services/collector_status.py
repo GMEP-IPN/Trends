@@ -117,6 +117,12 @@ class CollectorStatus:
             self._plc_statuses.clear()
             self._plc_errors.clear()
 
+    def remove_plc(self, plc_id: int):
+        """Удалить статус и ошибку конкретного PLC (вызывается при деактивации/удалении)."""
+        with self._lock:
+            self._plc_errors.pop(plc_id, None)
+            self._plc_statuses.pop(plc_id, None)
+
 
 # Глобальный потокобезопасный статус
 collector_status = CollectorStatus()

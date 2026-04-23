@@ -4,9 +4,10 @@
 """
 from datetime import datetime, timedelta
 from typing import List, Optional, Tuple, Dict
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 from app.storage import get_session, Tag, TrendData
+from app.storage.database import engine
 
 
 def get_trend_data(
@@ -153,23 +154,39 @@ def get_all_tags() -> List[dict]:
         return result
 
 
+_CLEANUP_BATCH = 10_000  # строк за одну транзакцию
+
+
 def cleanup_old_data(days: int = 30) -> int:
     """
-    Удаление старых данных трендов.
-    
-    Args:
-        days: Удалить данные старше X дней
-    
+    Удаление старых данных трендов батчами, чтобы не блокировать БД.
+    После удаления запускает incremental_vacuum для возврата страниц.
+
     Returns:
         Количество удалённых записей
     """
     cutoff = datetime.now() - timedelta(days=days)
-    
-    with get_session() as session:
-        deleted = session.query(TrendData).filter(
-            TrendData.timestamp < cutoff
-        ).delete()
-        
-        return deleted
+    total_deleted = 0
+
+    while True:
+        with get_session() as session:
+            deleted = session.execute(
+                text(
+                    "DELETE FROM trend_data WHERE id IN "
+                    "(SELECT id FROM trend_data WHERE timestamp < :cutoff LIMIT :batch)"
+                ),
+                {"cutoff": cutoff, "batch": _CLEANUP_BATCH},
+            ).rowcount
+        if not deleted:
+            break
+        total_deleted += deleted
+
+    if total_deleted > 0:
+        # Постепенно возвращаем освободившиеся страницы ОС (не VACUUM — не блокирует)
+        with engine.connect() as conn:
+            conn.execute(text("PRAGMA incremental_vacuum(2000)"))
+            conn.commit()
+
+    return total_deleted
 
 

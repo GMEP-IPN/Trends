@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, text, inspect
+from sqlalchemy import create_engine, event, text, inspect
 from sqlalchemy.orm import sessionmaker, Session
 from contextlib import contextmanager
 from typing import Generator
@@ -7,16 +7,27 @@ from app.config.settings import DATABASE_URL
 from app.storage.models import Base
 
 
-# Создаём движок БД
 import logging
 logger = logging.getLogger(__name__)
 logger.info(f"Creating database engine with URL: {DATABASE_URL}")
 
 engine = create_engine(
     DATABASE_URL,
-    echo=False,  # True для отладки SQL запросов
-    pool_pre_ping=True,  # Проверка соединения перед использованием
+    echo=False,
+    pool_pre_ping=True,
 )
+
+# SQLite-specific optimizations
+if DATABASE_URL.startswith("sqlite"):
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragmas(dbapi_conn, _rec):
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode = WAL")       # concurrent reads during writes
+        cur.execute("PRAGMA cache_size = -65536")      # 64 MB page cache
+        cur.execute("PRAGMA synchronous = NORMAL")     # safe + faster writes (WAL-compatible)
+        cur.execute("PRAGMA mmap_size = 134217728")    # 128 MB memory-mapped I/O
+        cur.execute("PRAGMA temp_store = MEMORY")      # temp tables in RAM
+        cur.close()
 
 # Фабрика сессий
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -62,11 +73,27 @@ def _run_migrations():
 
 def init_db():
     """Создание всех таблиц в БД и выполнение миграций"""
-    # Сначала выполняем миграции для существующих таблиц
     _run_migrations()
-    # Затем создаём недостающие таблицы
+    if DATABASE_URL.startswith("sqlite"):
+        _init_sqlite_autovacuum()
     Base.metadata.create_all(bind=engine)
     logger.info("Database initialized")
+
+
+def _init_sqlite_autovacuum():
+    """Включает INCREMENTAL auto_vacuum. Для существующих БД выполняет разовый VACUUM."""
+    with engine.connect() as conn:
+        result = conn.execute(text("PRAGMA auto_vacuum")).fetchone()
+        if result and result[0] == 0:  # 0 = NONE (не включён)
+            conn.execute(text("PRAGMA auto_vacuum = INCREMENTAL"))
+            conn.commit()
+            logger.info("SQLite: auto_vacuum = NONE detected — running VACUUM to activate INCREMENTAL mode")
+            # VACUUM нельзя выполнить внутри транзакции — используем raw DBAPI
+            raw = conn.connection
+            raw.isolation_level = None
+            raw.execute("VACUUM")
+            raw.isolation_level = ""
+            logger.info("SQLite: VACUUM completed, INCREMENTAL auto_vacuum activated")
 
 
 def drop_db():

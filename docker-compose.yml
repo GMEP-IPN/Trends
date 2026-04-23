@@ -1,0 +1,20 @@
+services:
+  trends:
+    build: .
+    container_name: trends
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - trends_db:/app/DB
+      - trends_logs:/app/logs
+    environment:
+      TRENDS_HOST: "0.0.0.0"
+      TRENDS_LOG_LEVEL: "INFO"
+      # TRENDS_DB_URL: "postgresql://user:pass@db:5432/trends"
+    # Для доступа к ПЛК в локальной сети используй network_mode: host
+    # network_mode: host
+
+volumes:
+  trends_db:
+  trends_logs:

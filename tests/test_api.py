@@ -152,7 +152,7 @@ class TestTagsEndpoint:
     
     def test_create_tag_no_plc(self, client):
         """Создание тега без активного ПЛК"""
-        with patch('app.api.server.get_session') as mock_session:
+        with patch('app.services.tag_service.get_session') as mock_session:
             session = MagicMock()
             session.query.return_value.filter.return_value.first.return_value = None
             mock_session.return_value.__enter__ = MagicMock(return_value=session)
@@ -171,23 +171,24 @@ class TestTagsEndpoint:
     
     def test_create_tag_duplicate_address(self, client):
         """Создание тега с существующим адресом"""
-        with patch('app.api.server.get_session') as mock_session:
+        with patch('app.services.tag_service.get_session') as mock_session:
             session = MagicMock()
-            
+
             mock_plc = MagicMock()
             mock_plc.id = 1
-            
+            mock_plc.plc_type = "siemens_s7"
+
             mock_existing_tag = MagicMock()
             mock_existing_tag.is_active = True  # Активный тег
-            
+
             session.query.return_value.filter.return_value.first.side_effect = [
                 mock_plc,          # PLC найден
                 mock_existing_tag  # Тег уже существует
             ]
-            
+
             mock_session.return_value.__enter__ = MagicMock(return_value=session)
             mock_session.return_value.__exit__ = MagicMock(return_value=False)
-            
+
             response = client.post("/api/tags", json={
                 "name": "DuplicateTag",
                 "db_number": 1,
@@ -195,13 +196,13 @@ class TestTagsEndpoint:
                 "data_type": "real",
                 "data_size": 4
             })
-            
+
             assert response.status_code == 400
             assert "already exists" in response.json()["detail"]
     
     def test_delete_tag_success(self, client, reset_collector_status):
         """Успешное удаление тега"""
-        with patch('app.api.server.get_session') as mock_session:
+        with patch('app.services.tag_service.get_session') as mock_session:
             session = MagicMock()
             
             mock_tag = MagicMock()
@@ -223,7 +224,7 @@ class TestTagsEndpoint:
     
     def test_delete_tag_not_found(self, client):
         """Удаление несуществующего тега"""
-        with patch('app.api.server.get_session') as mock_session:
+        with patch('app.services.tag_service.get_session') as mock_session:
             session = MagicMock()
             session.query.return_value.filter.return_value.first.return_value = None
             mock_session.return_value.__enter__ = MagicMock(return_value=session)
@@ -235,7 +236,7 @@ class TestTagsEndpoint:
     
     def test_update_tag_success(self, client, reset_collector_status):
         """Успешное обновление тега"""
-        with patch('app.api.server.get_session') as mock_session:
+        with patch('app.services.tag_service.get_session') as mock_session:
             session = MagicMock()
             
             mock_tag = MagicMock()

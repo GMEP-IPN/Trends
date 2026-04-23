@@ -1,0 +1,9 @@
+let selectedTagId = null;
+let selectedPlcId = null;
+let selectedPlcType = 'siemens_s7';
+let selectedMinutes = 15;
+let chart = null;
+let updateInterval = null;
+let tagsData = [];
+let visibleTagIds = new Set();
+let plcsData = [];

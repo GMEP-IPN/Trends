@@ -59,9 +59,6 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
     
     # Собираем конфиг только из системных настроек
     return AppConfig(
-        # База данных
-        database_url=data.get('database', {}).get('url', 'sqlite:///trends.db'),
-        
         # Коллектор
         batch_size=data.get('collector', {}).get('batch_size', 100),
         flush_interval_sec=data.get('collector', {}).get('flush_interval_sec', 5),
@@ -76,13 +73,16 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
         simulator_db_size=data.get('simulator', {}).get('db_size', 2000),
         simulator_update_interval=data.get('simulator', {}).get('update_interval_sec', 1.0),
         
-        # API
-        api_host=data.get('api', {}).get('host', '127.0.0.1'),
-        api_port=data.get('api', {}).get('port', 8000),
-        
-        # Логирование
-        log_level=data.get('logging', {}).get('level', 'INFO'),
+        # API (env vars override yaml: TRENDS_HOST, TRENDS_PORT)
+        api_host=os.environ.get('TRENDS_HOST', data.get('api', {}).get('host', '127.0.0.1')),
+        api_port=int(os.environ.get('TRENDS_PORT', data.get('api', {}).get('port', 8000))),
+
+        # Логирование (env var: TRENDS_LOG_LEVEL)
+        log_level=os.environ.get('TRENDS_LOG_LEVEL', data.get('logging', {}).get('level', 'INFO')),
         log_file=data.get('logging', {}).get('file', 'logs/collector.log'),
+
+        # База данных (env var override: TRENDS_DB_URL)
+        database_url=os.environ.get('TRENDS_DB_URL', data.get('database', {}).get('url', 'sqlite:///trends.db')),
     )
 
 
