@@ -78,6 +78,27 @@ async function loadStatus() {
     }
 }
 
+async function checkForUpdates() {
+    const btn = document.getElementById('checkUpdateBtn');
+    btn.classList.add('spinning');
+    btn.disabled = true;
+    try {
+        const r = await fetch('/api/update/check', { method: 'POST' });
+        const data = await r.json();
+        if (data.update_available) {
+            showToast(`Доступно обновление: v${data.latest_version}`, 'success');
+        } else {
+            showToast('Установлена последняя версия', 'success');
+        }
+        await loadStatus();
+    } catch {
+        showToast('Не удалось проверить обновления', 'error');
+    } finally {
+        btn.classList.remove('spinning');
+        btn.disabled = false;
+    }
+}
+
 async function checkFirstRun() {
     try {
         const response = await fetch('/api/plcs');

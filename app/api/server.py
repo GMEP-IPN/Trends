@@ -135,6 +135,13 @@ async def restart_collector():
     return {"message": "Restart requested", "status": "pending"}
 
 
+@app.post("/api/update/check")
+async def check_update():
+    import asyncio
+    await asyncio.get_event_loop().run_in_executor(None, update_checker._check)
+    return update_checker.get_info()
+
+
 @app.get("/api/plcs/{plc_id}/browse")
 async def browse_plc(plc_id: int, program: str = None):
     """Browse PLC — возвращает теги/блоки, прочитанные с PLC напрямую."""
