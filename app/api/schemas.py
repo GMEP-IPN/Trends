@@ -142,6 +142,9 @@ class SystemStatusResponse(BaseModel):
     collector_running: bool = False
     connection_status: str = "unknown"
     plc_errors: Dict[str, str] = {}
+    update_available: bool = False
+    latest_version: Optional[str] = None
+    releases_url: Optional[str] = None
 
 
 class TagCreateResponse(BaseModel):

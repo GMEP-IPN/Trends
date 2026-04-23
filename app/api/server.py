@@ -31,7 +31,7 @@ from app.api.schemas import (
     StatisticsResponse,
     SystemStatusResponse,
 )
-from app.services import plc_service, tag_service
+from app.services import plc_service, tag_service, update_checker
 from app.services.collector_status import collector_status
 from app.services.trend_service import (
     get_trend_data,
@@ -53,6 +53,7 @@ static_path = _BASE_DIR / "web" / "static"
 static_path.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
+update_checker.start()
 
 # === Endpoints ===
 
@@ -87,6 +88,7 @@ async def get_status():
             for plc_id, error in errors_by_id.items():
                 plc_errors[plc_names.get(plc_id, f"PLC #{plc_id}")] = error
 
+        upd = update_checker.get_info()
         return SystemStatusResponse(
             version=__version__,
             plc_count=plc_count,
@@ -96,6 +98,9 @@ async def get_status():
             collector_running=collector_status.running,
             connection_status=conn_status,
             plc_errors=plc_errors,
+            update_available=upd["update_available"],
+            latest_version=upd["latest_version"],
+            releases_url=upd["releases_url"],
         )
 
 

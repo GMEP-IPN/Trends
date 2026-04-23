@@ -13,7 +13,14 @@ async function loadStatus() {
         const status = await response.json();
 
         const versionBadge = document.getElementById('versionBadge');
-        if (status.version && versionBadge) versionBadge.textContent = `v${status.version}`;
+        if (versionBadge) {
+            if (status.update_available && status.releases_url) {
+                versionBadge.innerHTML =
+                    `v${status.version} <a href="${status.releases_url}" target="_blank" title="Update available: v${status.latest_version}" style="color:var(--warning);text-decoration:none">↑ v${status.latest_version}</a>`;
+            } else if (status.version) {
+                versionBadge.textContent = `v${status.version}`;
+            }
+        }
 
         const dot = document.getElementById('statusDot');
         const text = document.getElementById('statusText');
