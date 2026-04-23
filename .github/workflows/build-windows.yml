@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -39,4 +41,3 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/Trends.exe
-          generate_release_notes: true
