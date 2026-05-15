@@ -110,6 +110,7 @@ class TagResponse(BaseModel):
     data_type: str
     ab_tag_name: Optional[str] = None
     poll_interval_ms: int
+    is_archived: bool = False
     latest_value: Optional[float]
     latest_time: Optional[str]
 

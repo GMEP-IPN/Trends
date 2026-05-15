@@ -328,10 +328,12 @@ def _get_simulated_ab_tags(plc):
 
 
 @app.get("/api/tags", response_model=List[TagResponse])
-async def list_tags(plc_id: Optional[int] = None):
+async def list_tags(plc_id: Optional[int] = None, include_archived: bool = False):
     """Список тегов с последними значениями (batch-запрос против N+1)."""
     with get_session() as session:
-        query = session.query(Tag).join(PLC).filter(Tag.is_active == True, PLC.is_archived == False)
+        query = session.query(Tag).join(PLC).filter(PLC.is_archived == False)
+        if not include_archived:
+            query = query.filter(Tag.is_active == True, Tag.is_archived == False)
         if plc_id:
             query = query.filter(Tag.plc_id == plc_id)
         tags = query.all()
@@ -350,6 +352,7 @@ async def list_tags(plc_id: Optional[int] = None):
                 data_type=tag.data_type,
                 ab_tag_name=getattr(tag, "ab_tag_name", None),
                 poll_interval_ms=tag.poll_interval_ms,
+                is_archived=getattr(tag, "is_archived", False),
                 latest_value=latest_values.get(tag.id)[1] if latest_values.get(tag.id) else None,
                 latest_time=latest_values.get(tag.id)[0].isoformat() if latest_values.get(tag.id) else None,
             )
@@ -429,6 +432,16 @@ async def update_tag(tag_id: int, request: TagUpdateRequest):
 @app.delete("/api/tags/{tag_id}")
 async def delete_tag(tag_id: int):
     return tag_service.delete_tag(tag_id)
+
+
+@app.put("/api/tags/{tag_id}/archive")
+async def archive_tag(tag_id: int):
+    return tag_service.archive_tag(tag_id)
+
+
+@app.put("/api/tags/{tag_id}/unarchive")
+async def unarchive_tag(tag_id: int):
+    return tag_service.unarchive_tag(tag_id)
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8000):

@@ -76,7 +76,8 @@ class Tag(Base):
     # Настройки опроса
     poll_interval_ms = Column(Integer, default=1000)  # Интервал опроса в мс
     is_active = Column(Boolean, default=True)
-    
+    is_archived = Column(Boolean, default=False)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Связи

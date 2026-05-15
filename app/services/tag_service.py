@@ -83,6 +83,8 @@ def _validate_s7_request(request: TagCreateRequest, memory_area: str) -> None:
 
 
 def _reactivate_tag(tag: Tag, request: TagCreateRequest) -> Dict[str, Any]:
+    if getattr(tag, "is_archived", False):
+        raise HTTPException(status_code=400, detail=f"Tag '{tag.name}' is archived — restore it first")
     tag.name = request.name
     tag.description = request.description
     tag.memory_area = request.memory_area or "DB"
@@ -207,6 +209,30 @@ def _apply_s7_updates(tag: Tag, request: TagUpdateRequest) -> None:
             tag.bit_number = 0
     elif request.bit_number is not None and tag.data_type == "bool":
         tag.bit_number = request.bit_number
+
+
+def archive_tag(tag_id: int) -> Dict[str, Any]:
+    with get_session() as session:
+        tag = session.query(Tag).filter(Tag.id == tag_id).first()
+        if not tag:
+            raise HTTPException(status_code=404, detail="Tag not found")
+        tag.is_archived = True
+        tag.is_active = False
+        tag_name = tag.name
+        session.commit()
+    collector_status.request_restart()
+    return {"message": f"Tag '{tag_name}' archived", "id": tag_id}
+
+
+def unarchive_tag(tag_id: int) -> Dict[str, Any]:
+    with get_session() as session:
+        tag = session.query(Tag).filter(Tag.id == tag_id).first()
+        if not tag:
+            raise HTTPException(status_code=404, detail="Tag not found")
+        tag.is_archived = False
+        tag_name = tag.name
+        session.commit()
+    return {"message": f"Tag '{tag_name}' restored from archive", "id": tag_id}
 
 
 def delete_tag(tag_id: int) -> Dict[str, Any]:

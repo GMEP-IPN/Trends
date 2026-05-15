@@ -34,13 +34,59 @@ function formatTagAddress(tag) {
     return 'N/A';
 }
 
+function renderTagItem(tag, index) {
+    const color = chartColors[index % chartColors.length];
+    const isVisible = visibleTagIds.has(tag.id);
+    return `
+    <div class="tag-item" data-id="${tag.id}">
+        <input type="checkbox" class="tag-checkbox"
+               ${isVisible ? 'checked' : ''}
+               onclick="event.stopPropagation(); toggleTagVisibility(${tag.id})"
+               title="Show on chart">
+        <span class="tag-color-dot" style="background: ${color.border}; opacity: ${isVisible ? 1 : 0.3}"></span>
+        <div class="tag-info" onclick="selectTag(${tag.id}, '${tag.name}')">
+            <div class="tag-name">${tag.name}</div>
+            <div class="tag-meta">${formatTagAddress(tag)}</div>
+        </div>
+        <div class="tag-value" style="opacity: ${isVisible ? 1 : 0.5}">${tag.latest_value !== null ? tag.latest_value.toFixed(2) : '--'}</div>
+        <div class="tag-actions">
+            <button class="tag-action-btn" onclick="event.stopPropagation(); editTag(${tag.id})" title="Edit">✏️</button>
+            <button class="tag-action-btn" onclick="event.stopPropagation(); archiveTag(${tag.id}, '${tag.name}')" title="В архив">📦</button>
+            <button class="tag-action-btn delete" onclick="deleteTag(event, ${tag.id}, '${tag.name}')" title="Delete">🗑️</button>
+        </div>
+    </div>`;
+}
+
+function renderArchivedTagItem(tag) {
+    return `
+    <div class="tag-item" data-id="${tag.id}" style="opacity: 0.6;">
+        <span style="font-size: 0.9rem; margin: 0 0.25rem;">📦</span>
+        <div class="tag-info" style="flex: 1;">
+            <div class="tag-name">${tag.name}</div>
+            <div class="tag-meta">${formatTagAddress(tag)}</div>
+        </div>
+        <div class="tag-actions">
+            <button class="tag-action-btn" onclick="event.stopPropagation(); unarchiveTag(${tag.id}, '${tag.name}')" title="Восстановить">📤</button>
+            <button class="tag-action-btn delete" onclick="deleteTag(event, ${tag.id}, '${tag.name}')" title="Delete">🗑️</button>
+        </div>
+    </div>`;
+}
+
 async function loadTags() {
     try {
-        const tags = await fetchTags();
         const tagList = document.getElementById('tagList');
         if (!tagList) return;
 
-        if (!tags || tags.length === 0) {
+        const baseUrl = selectedPlcId ? `/api/tags?plc_id=${selectedPlcId}` : '/api/tags';
+        const [activeResp, allResp] = await Promise.all([
+            fetch(baseUrl),
+            fetch(baseUrl + (selectedPlcId ? '&' : '?') + 'include_archived=true'),
+        ]);
+        const activeTags = await activeResp.json();
+        const allTags = await allResp.json();
+        const archivedTags = allTags.filter(t => t.is_archived);
+
+        if (activeTags.length === 0 && archivedTags.length === 0) {
             tagList.innerHTML = `
                 <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
                     <div style="font-size: 2rem; margin-bottom: 0.5rem;">📭</div>
@@ -50,32 +96,37 @@ async function loadTags() {
             return;
         }
 
-        tagList.innerHTML = tags.map((tag, index) => {
-            const color = chartColors[index % chartColors.length];
-            const isVisible = visibleTagIds.has(tag.id);
-            return `
-            <div class="tag-item" data-id="${tag.id}">
-                <input type="checkbox" class="tag-checkbox"
-                       ${isVisible ? 'checked' : ''}
-                       onclick="event.stopPropagation(); toggleTagVisibility(${tag.id})"
-                       title="Show on chart">
-                <span class="tag-color-dot" style="background: ${color.border}; opacity: ${isVisible ? 1 : 0.3}"></span>
-                <div class="tag-info" onclick="selectTag(${tag.id}, '${tag.name}')">
-                    <div class="tag-name">${tag.name}</div>
-                    <div class="tag-meta">${formatTagAddress(tag)}</div>
+        let html = activeTags.map((tag, index) => renderTagItem(tag, index)).join('');
+
+        if (archivedTags.length > 0) {
+            const isOpen = document.getElementById('tagArchiveList')?.style.display === 'block';
+            html += `
+            <div class="archive-section">
+                <div class="archive-toggle" onclick="toggleTagArchiveSection()">
+                    📦 Архив <span class="archive-count">${archivedTags.length}</span>
+                    <span class="archive-arrow" id="tagArchiveArrow">${isOpen ? '▲' : '▼'}</span>
                 </div>
-                <div class="tag-value" style="opacity: ${isVisible ? 1 : 0.5}">${tag.latest_value !== null ? tag.latest_value.toFixed(2) : '--'}</div>
-                <div class="tag-actions">
-                    <button class="tag-action-btn" onclick="event.stopPropagation(); editTag(${tag.id})" title="Edit">✏️</button>
-                    <button class="tag-action-btn delete" onclick="deleteTag(event, ${tag.id}, '${tag.name}')" title="Delete">🗑️</button>
+                <div id="tagArchiveList" style="display: ${isOpen ? 'block' : 'none'};">
+                    ${archivedTags.map(t => renderArchivedTagItem(t)).join('')}
                 </div>
             </div>`;
-        }).join('');
+        }
 
-        if (tags.length > 0 && !selectedTagId) selectedTagId = tags[0].id;
+        tagList.innerHTML = html;
+
+        if (activeTags.length > 0 && !selectedTagId) selectedTagId = activeTags[0].id;
     } catch (error) {
         console.error('Error loading tags:', error);
     }
+}
+
+function toggleTagArchiveSection() {
+    const list = document.getElementById('tagArchiveList');
+    const arrow = document.getElementById('tagArchiveArrow');
+    if (!list) return;
+    const isOpen = list.style.display !== 'none';
+    list.style.display = isOpen ? 'none' : 'block';
+    if (arrow) arrow.textContent = isOpen ? '▼' : '▲';
 }
 
 async function toggleTagVisibility(tagId) {
@@ -317,6 +368,38 @@ async function deleteTag(event, tagId, tagName) {
             await initTrends();
         } else {
             showToast('Delete error', 'error');
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function archiveTag(tagId, tagName) {
+    try {
+        const response = await fetch(`/api/tags/${tagId}/archive`, { method: 'PUT' });
+        if (response.ok) {
+            visibleTagIds.delete(tagId);
+            saveVisibleTags();
+            showToast(`Тег "${tagName}" убран в архив`, 'success');
+            await loadTags();
+            await initTrends();
+        } else {
+            showToast('Ошибка архивирования', 'error');
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function unarchiveTag(tagId, tagName) {
+    try {
+        const response = await fetch(`/api/tags/${tagId}/unarchive`, { method: 'PUT' });
+        if (response.ok) {
+            showToast(`Тег "${tagName}" восстановлен из архива`, 'success');
+            await loadTags();
+            await initTrends();
+        } else {
+            showToast('Ошибка восстановления', 'error');
         }
     } catch (error) {
         showToast('Network error', 'error');
