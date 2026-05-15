@@ -1,14 +1,14 @@
 const chartColors = [
+    { border: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.1)' },
+    { border: '#06b6d4', bg: 'rgba(6, 182, 212, 0.1)' },
     { border: '#00d4aa', bg: 'rgba(0, 212, 170, 0.1)' },
-    { border: '#7c3aed', bg: 'rgba(124, 58, 237, 0.1)' },
     { border: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
     { border: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)' },
     { border: '#22c55e', bg: 'rgba(34, 197, 94, 0.1)' },
     { border: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
     { border: '#ec4899', bg: 'rgba(236, 72, 153, 0.1)' },
     { border: '#eab308', bg: 'rgba(234, 179, 8, 0.1)' },
-    { border: '#06b6d4', bg: 'rgba(6, 182, 212, 0.1)' },
-    { border: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.1)' },
+    { border: '#f97316', bg: 'rgba(249, 115, 22, 0.1)' },
 ];
 
 const chartConfig = {
@@ -31,11 +31,11 @@ const chartConfig = {
                 }
             },
             tooltip: {
-                backgroundColor: '#1a1a24',
-                titleColor: '#e4e4e7',
-                bodyColor: '#e4e4e7',
+                backgroundColor: '#242435',
+                titleColor: '#e2e4f0',
+                bodyColor: '#e2e4f0',
                 bodyFont: { family: 'JetBrains Mono', size: 12 },
-                borderColor: '#27272a',
+                borderColor: '#2e3047',
                 borderWidth: 1,
                 padding: 12,
                 displayColors: true,
@@ -56,12 +56,12 @@ const chartConfig = {
             x: {
                 type: 'time',
                 time: { displayFormats: { minute: 'HH:mm', hour: 'HH:mm' } },
-                grid: { color: '#27272a', drawBorder: false },
-                ticks: { color: '#71717a', font: { family: 'JetBrains Mono' } }
+                grid: { color: '#2e3047', drawBorder: false },
+                ticks: { color: '#8b8fa8', font: { family: 'JetBrains Mono' } }
             },
             y: {
-                grid: { color: '#27272a', drawBorder: false },
-                ticks: { color: '#71717a', font: { family: 'JetBrains Mono' } }
+                grid: { color: '#2e3047', drawBorder: false },
+                ticks: { color: '#8b8fa8', font: { family: 'JetBrains Mono' } }
             }
         }
     }
@@ -107,13 +107,20 @@ function toggleTheme() {
 
 function updateChartColors() {
     if (!chart) return;
-    const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim();
-    const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--border').trim();
-    chart.options.scales.x.grid.color = gridColor;
-    chart.options.scales.y.grid.color = gridColor;
-    chart.options.scales.x.ticks.color = textColor;
-    chart.options.scales.y.ticks.color = textColor;
-    chart.options.plugins.legend.labels.color = getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim();
+    const cs = getComputedStyle(document.documentElement);
+    const textPrimary  = cs.getPropertyValue('--text-primary').trim();
+    const textSecondary = cs.getPropertyValue('--text-secondary').trim();
+    const border = cs.getPropertyValue('--border').trim();
+    const bgCard = cs.getPropertyValue('--bg-card').trim();
+    chart.options.scales.x.grid.color = border;
+    chart.options.scales.y.grid.color = border;
+    chart.options.scales.x.ticks.color = textSecondary;
+    chart.options.scales.y.ticks.color = textSecondary;
+    chart.options.plugins.legend.labels.color = textPrimary;
+    chart.options.plugins.tooltip.backgroundColor = bgCard;
+    chart.options.plugins.tooltip.titleColor = textPrimary;
+    chart.options.plugins.tooltip.bodyColor = textPrimary;
+    chart.options.plugins.tooltip.borderColor = border;
     chart.update('none');
 }
 
