@@ -378,12 +378,12 @@ async def get_tag_trend(
 async def get_all_trends(
     plc_id: Optional[int] = None,
     minutes: int = Query(default=60, ge=1, le=525600),
-    from_time: Optional[str] = None,
-    to_time: Optional[str] = None,
+    from_time: Optional[float] = None,
+    to_time: Optional[float] = None,
 ):
-    if from_time and to_time:
-        start_time = datetime.fromisoformat(from_time)
-        end_time = datetime.fromisoformat(to_time)
+    if from_time is not None and to_time is not None:
+        start_time = datetime.fromtimestamp(from_time / 1000)
+        end_time = datetime.fromtimestamp(to_time / 1000)
     else:
         end_time = datetime.now()
         start_time = end_time - timedelta(minutes=minutes)

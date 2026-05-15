@@ -165,8 +165,8 @@ async function fetchMoreHistory() {
     const fromTime = new Date(toTime.getTime() - chunkMs);
 
     try {
-        const base = selectedPlcId ? `/api/trends?plc_id=${selectedPlcId}` : '/api/trends';
-        const url = `${base}&from_time=${fromTime.toISOString()}&to_time=${toTime.toISOString()}`;
+        const base = selectedPlcId ? `/api/trends?plc_id=${selectedPlcId}&` : '/api/trends?';
+        const url = `${base}from_time=${fromTime.getTime()}&to_time=${toTime.getTime()}`;
         const resp = await fetch(url);
         if (!resp.ok) return;
         const trends = await resp.json();
