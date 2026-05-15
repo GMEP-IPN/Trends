@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 from pathlib import Path
 
+import re
 import sys
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -78,7 +79,14 @@ update_checker.start()
 async def root():
     template_path = _BASE_DIR / "web" / "templates" / "index.html"
     if template_path.exists():
-        return FileResponse(template_path)
+        content = template_path.read_text(encoding="utf-8")
+        # Вшиваем версию в URL статики — браузер воспринимает ?v=X как новый URL
+        content = re.sub(
+            r'((?:src|href)="/static/[^"?]*)"',
+            rf'\1?v={__version__}"',
+            content,
+        )
+        return HTMLResponse(content, headers={"Cache-Control": "no-store"})
     return HTMLResponse("<h1>Trends</h1><p>UI not found. Check installation.</p>")
 
 
