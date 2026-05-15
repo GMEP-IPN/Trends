@@ -38,17 +38,13 @@ function renderTagItem(tag, index) {
     const color = chartColors[index % chartColors.length];
     const isVisible = visibleTagIds.has(tag.id);
     return `
-    <div class="tag-item" data-id="${tag.id}">
-        <input type="checkbox" class="tag-checkbox"
-               ${isVisible ? 'checked' : ''}
-               onclick="event.stopPropagation(); toggleTagVisibility(${tag.id})"
-               title="Show on chart">
-        <span class="tag-color-dot" style="background: ${color.border}; opacity: ${isVisible ? 1 : 0.3}"></span>
-        <div class="tag-info" onclick="selectTag(${tag.id}, '${tag.name}')">
+    <div class="tag-item${isVisible ? '' : ' tag-hidden'}" data-id="${tag.id}" onclick="toggleTagVisibility(${tag.id})">
+        <span class="tag-color-dot" style="background: ${color.border}"></span>
+        <div class="tag-info">
             <div class="tag-name">${tag.name}</div>
             <div class="tag-meta">${formatTagAddress(tag)}</div>
         </div>
-        <div class="tag-value" style="opacity: ${isVisible ? 1 : 0.5}">${tag.latest_value !== null ? tag.latest_value.toFixed(2) : '--'}</div>
+        <div class="tag-value">${tag.latest_value !== null ? tag.latest_value.toFixed(2) : '--'}</div>
         <div class="tag-actions">
             <button class="tag-action-btn" onclick="event.stopPropagation(); editTag(${tag.id})" title="Edit">✏️</button>
             <button class="tag-action-btn" onclick="event.stopPropagation(); archiveTag(${tag.id}, '${tag.name}')" title="В архив">📦</button>
@@ -138,15 +134,8 @@ async function toggleTagVisibility(tagId) {
     saveVisibleTags();
 
     const tagItem = document.querySelector(`.tag-item[data-id="${tagId}"]`);
-    if (tagItem) {
-        const isVisible = visibleTagIds.has(tagId);
-        const checkbox = tagItem.querySelector('.tag-checkbox');
-        const colorDot = tagItem.querySelector('.tag-color-dot');
-        const valueEl = tagItem.querySelector('.tag-value');
-        if (checkbox) checkbox.checked = isVisible;
-        if (colorDot) colorDot.style.opacity = isVisible ? 1 : 0.3;
-        if (valueEl) valueEl.style.opacity = isVisible ? 1 : 0.5;
-    }
+    if (tagItem) tagItem.classList.toggle('tag-hidden', !visibleTagIds.has(tagId));
+
     await loadTrendData();
 }
 
@@ -168,15 +157,9 @@ async function deselectAllTags() {
 }
 
 function updateTagCheckboxes() {
-    document.querySelectorAll('.tag-item').forEach(tagItem => {
+    document.querySelectorAll('.tag-item[data-id]').forEach(tagItem => {
         const tagId = parseInt(tagItem.dataset.id);
-        const isVisible = visibleTagIds.has(tagId);
-        const checkbox = tagItem.querySelector('.tag-checkbox');
-        const colorDot = tagItem.querySelector('.tag-color-dot');
-        const valueEl = tagItem.querySelector('.tag-value');
-        if (checkbox) checkbox.checked = isVisible;
-        if (colorDot) colorDot.style.opacity = isVisible ? 1 : 0.3;
-        if (valueEl) valueEl.style.opacity = isVisible ? 1 : 0.5;
+        tagItem.classList.toggle('tag-hidden', !visibleTagIds.has(tagId));
     });
 }
 

@@ -439,12 +439,12 @@ body {
     flex-shrink: 0;
 }
 
-.tag-checkbox {
-    width: 16px;
-    height: 16px;
-    cursor: pointer;
-    accent-color: var(--accent);
-    flex-shrink: 0;
+.tag-item.tag-hidden {
+    opacity: 0.4;
+}
+
+.tag-item.tag-hidden .tag-color-dot {
+    filter: grayscale(1);
 }
 
 .tag-value {
