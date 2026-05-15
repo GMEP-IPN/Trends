@@ -50,6 +50,15 @@ app = FastAPI(
     version=__version__,
 )
 
+# Запрещаем кэширование всех /api/* ответов и HTML-страницы
+@app.middleware("http")
+async def no_cache_middleware(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/api/") or path == "/":
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
 # Статические файлы — no-cache чтобы браузер не держал устаревшие JS/CSS
 class NoCacheStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope: Scope) -> Response:
