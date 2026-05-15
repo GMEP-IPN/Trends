@@ -76,6 +76,19 @@ function resetZoom() {
     if (chart) chart.resetZoom();
 }
 
+function toggleYLock() {
+    yAxisLocked = !yAxisLocked;
+    const mode = yAxisLocked ? 'x' : 'xy';
+    chart.options.plugins.zoom.pan.mode = mode;
+    chart.options.plugins.zoom.zoom.wheel.enabled = true;
+    chart.options.plugins.zoom.zoom.mode = mode;
+    chart.update('none');
+
+    const btn = document.getElementById('yLockBtn');
+    btn.classList.toggle('active', yAxisLocked);
+    btn.title = yAxisLocked ? 'Y locked (click to unlock)' : 'Lock Y axis';
+}
+
 function toggleFullscreen() {
     const container = document.getElementById('chartContainer');
     const btn = document.getElementById('fullscreenBtn');

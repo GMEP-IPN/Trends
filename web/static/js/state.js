@@ -7,3 +7,4 @@ let updateInterval = null;
 let tagsData = [];
 let visibleTagIds = new Set();
 let plcsData = [];
+let yAxisLocked = false;
