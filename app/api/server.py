@@ -10,6 +10,8 @@ import sys
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
+from starlette.responses import Response
+from starlette.types import Scope
 
 # Определяем базовую директорию (для .exe и обычного запуска)
 if getattr(sys, 'frozen', False):
@@ -48,10 +50,16 @@ app = FastAPI(
     version=__version__,
 )
 
-# Статические файлы
+# Статические файлы — no-cache чтобы браузер не держал устаревшие JS/CSS
+class NoCacheStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+
 static_path = _BASE_DIR / "web" / "static"
 static_path.mkdir(parents=True, exist_ok=True)
-app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+app.mount("/static", NoCacheStaticFiles(directory=str(static_path)), name="static")
 
 update_checker.start()
 
