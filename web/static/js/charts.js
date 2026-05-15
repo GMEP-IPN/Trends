@@ -48,7 +48,7 @@ const chartConfig = {
                 zoom: {
                     wheel: { enabled: true },
                     pinch: { enabled: true },
-                    mode: 'xy',
+                    mode: 'x',
                     onZoomComplete: onChartNavigate,
                 }
             }
@@ -79,10 +79,7 @@ function resetZoom() {
 
 function toggleYLock() {
     yAxisLocked = !yAxisLocked;
-    const mode = yAxisLocked ? 'x' : 'xy';
-    chart.options.plugins.zoom.pan.mode = mode;
-    chart.options.plugins.zoom.zoom.wheel.enabled = true;
-    chart.options.plugins.zoom.zoom.mode = mode;
+    chart.options.plugins.zoom.pan.mode = yAxisLocked ? 'x' : 'xy';
     chart.update('none');
 
     const btn = document.getElementById('yLockBtn');

@@ -22,16 +22,6 @@ document.getElementById('browseModal').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeBrowseModal();
 });
 
-// Time period selector
-document.querySelectorAll('.time-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        selectedMinutes = parseInt(btn.dataset.minutes);
-        initTrends();
-    });
-});
-
 // Boot sequence
 document.addEventListener('DOMContentLoaded', async () => {
     loadSavedTheme();
