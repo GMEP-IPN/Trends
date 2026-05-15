@@ -44,11 +44,12 @@ const chartConfig = {
                 }
             },
             zoom: {
-                pan: { enabled: true, mode: 'xy' },
+                pan: { enabled: true, mode: 'xy', onPanComplete: onChartNavigate },
                 zoom: {
                     wheel: { enabled: true },
                     pinch: { enabled: true },
                     mode: 'xy',
+                    onZoomComplete: onChartNavigate,
                 }
             }
         },
@@ -145,6 +146,54 @@ function loadSavedTheme() {
     }
 }
 
+function onChartNavigate() {
+    if (isFetchingHistory || !loadedFrom || !chart) return;
+    const xMin = chart.scales.x.min;
+    const xMax = chart.scales.x.max;
+    const visibleRange = xMax - xMin;
+    // Дозагружаем когда левый край экрана приблизился к границе загруженных данных
+    if (xMin - loadedFrom.getTime() < visibleRange * 0.5) {
+        fetchMoreHistory();
+    }
+}
+
+async function fetchMoreHistory() {
+    if (isFetchingHistory || !loadedFrom || chart.data.datasets.length === 0) return;
+    isFetchingHistory = true;
+
+    const chunkMs = selectedMinutes * 60 * 1000;
+    const toTime = loadedFrom;
+    const fromTime = new Date(toTime.getTime() - chunkMs);
+
+    try {
+        const base = selectedPlcId ? `/api/trends?plc_id=${selectedPlcId}` : '/api/trends';
+        const url = `${base}&from_time=${fromTime.toISOString()}&to_time=${toTime.toISOString()}`;
+        const resp = await fetch(url);
+        if (!resp.ok) return;
+        const trends = await resp.json();
+
+        let anyData = false;
+        trends.forEach(trend => {
+            const dataset = chart.data.datasets.find(d => d.tagId === trend.tag_id);
+            if (dataset && trend.data.length > 0) {
+                const newPoints = trend.data.map(p => ({ x: new Date(p.timestamp), y: p.value }));
+                dataset.data = [...newPoints, ...dataset.data];
+                anyData = true;
+            }
+        });
+
+        if (anyData) {
+            loadedFrom = fromTime;
+            chart.update('none');
+        } else {
+            // Данных больше нет — дальше не грузим
+            loadedFrom = null;
+        }
+    } finally {
+        isFetchingHistory = false;
+    }
+}
+
 async function loadTrendData() {
     try {
         const url = selectedPlcId
@@ -154,6 +203,9 @@ async function loadTrendData() {
         if (!response.ok) return;
         const trends = await response.json();
         tagsData = trends;
+
+        loadedFrom = new Date(Date.now() - selectedMinutes * 60 * 1000);
+        isFetchingHistory = false;
 
         const visibleTrends = trends.filter(t => visibleTagIds.has(t.tag_id));
         chart.data.datasets = visibleTrends.map((trend) => {
@@ -176,6 +228,7 @@ async function loadTrendData() {
                 spanGaps: false
             };
         });
+        chart.resetZoom();
         chart.update('none');
 
         const visibleCount = visibleTrends.length;

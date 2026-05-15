@@ -377,10 +377,16 @@ async def get_tag_trend(
 @app.get("/api/trends", response_model=List[TagTrendResponse])
 async def get_all_trends(
     plc_id: Optional[int] = None,
-    minutes: int = Query(default=60, ge=1, le=1440, description="Период в минутах"),
+    minutes: int = Query(default=60, ge=1, le=525600),
+    from_time: Optional[str] = None,
+    to_time: Optional[str] = None,
 ):
-    end_time = datetime.now()
-    start_time = end_time - timedelta(minutes=minutes)
+    if from_time and to_time:
+        start_time = datetime.fromisoformat(from_time)
+        end_time = datetime.fromisoformat(to_time)
+    else:
+        end_time = datetime.now()
+        start_time = end_time - timedelta(minutes=minutes)
 
     with get_session() as session:
         query = session.query(Tag).join(PLC).filter(Tag.is_active == True, PLC.is_archived == False)

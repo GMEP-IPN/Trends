@@ -8,3 +8,5 @@ let tagsData = [];
 let visibleTagIds = new Set();
 let plcsData = [];
 let yAxisLocked = false;
+let loadedFrom = null;
+let isFetchingHistory = false;
