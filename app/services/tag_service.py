@@ -230,8 +230,10 @@ def unarchive_tag(tag_id: int) -> Dict[str, Any]:
         if not tag:
             raise HTTPException(status_code=404, detail="Tag not found")
         tag.is_archived = False
+        tag.is_active = True
         tag_name = tag.name
         session.commit()
+    collector_status.request_restart()
     return {"message": f"Tag '{tag_name}' restored from archive", "id": tag_id}
 
 
