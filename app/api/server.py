@@ -68,8 +68,8 @@ async def root():
 @app.get("/api/status", response_model=SystemStatusResponse)
 async def get_status():
     with get_session() as session:
-        plc_count = session.query(PLC).filter(PLC.is_active == True).count()
-        tag_count = session.query(Tag).filter(Tag.is_active == True).count()
+        plc_count = session.query(PLC).filter(PLC.is_active == True, PLC.is_archived == False).count()
+        tag_count = session.query(Tag).join(PLC).filter(Tag.is_active == True, PLC.is_archived == False).count()
         trend_count = session.query(TrendData).count()
 
         last = session.query(TrendData).order_by(TrendData.timestamp.desc()).first()
@@ -105,8 +105,8 @@ async def get_status():
 
 
 @app.get("/api/plcs", response_model=List[PLCResponse])
-async def list_plcs():
-    return [PLCResponse(**item) for item in plc_service.list_plcs()]
+async def list_plcs(include_archived: bool = False):
+    return [PLCResponse(**item) for item in plc_service.list_plcs(include_archived=include_archived)]
 
 
 @app.post("/api/plcs", response_model=PLCCreateResponse)
@@ -127,6 +127,16 @@ async def delete_plc(plc_id: int):
 @app.put("/api/plcs/{plc_id}/toggle")
 async def toggle_plc(plc_id: int):
     return plc_service.toggle_plc(plc_id)
+
+
+@app.put("/api/plcs/{plc_id}/archive")
+async def archive_plc(plc_id: int):
+    return plc_service.archive_plc(plc_id)
+
+
+@app.put("/api/plcs/{plc_id}/unarchive")
+async def unarchive_plc(plc_id: int):
+    return plc_service.unarchive_plc(plc_id)
 
 
 @app.post("/api/collector/restart")
@@ -296,7 +306,7 @@ def _get_simulated_ab_tags(plc):
 async def list_tags(plc_id: Optional[int] = None):
     """Список тегов с последними значениями (batch-запрос против N+1)."""
     with get_session() as session:
-        query = session.query(Tag).filter(Tag.is_active == True)
+        query = session.query(Tag).join(PLC).filter(Tag.is_active == True, PLC.is_archived == False)
         if plc_id:
             query = query.filter(Tag.plc_id == plc_id)
         tags = query.all()
@@ -345,7 +355,7 @@ async def get_all_trends(
     start_time = end_time - timedelta(minutes=minutes)
 
     with get_session() as session:
-        query = session.query(Tag).filter(Tag.is_active == True)
+        query = session.query(Tag).join(PLC).filter(Tag.is_active == True, PLC.is_archived == False)
         if plc_id:
             query = query.filter(Tag.plc_id == plc_id)
         tags = query.all()

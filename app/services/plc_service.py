@@ -34,10 +34,13 @@ def _resolve_connection_status(plc: PLC) -> str:
     return "unknown"
 
 
-def list_plcs() -> list[dict]:
-    """Список всех ПЛК со счётчиком тегов и статусом подключения."""
+def list_plcs(include_archived: bool = False) -> list[dict]:
+    """Список ПЛК со счётчиком тегов и статусом подключения."""
     with get_session() as session:
-        plcs = session.query(PLC).all()
+        query = session.query(PLC)
+        if not include_archived:
+            query = query.filter(PLC.is_archived == False)
+        plcs = query.all()
         result = []
         for plc in plcs:
             tag_count = session.query(Tag).filter(
@@ -55,6 +58,7 @@ def list_plcs() -> list[dict]:
                 "slot": plc.slot,
                 "slot_ab": getattr(plc, "slot_ab", 0),
                 "is_active": plc.is_active,
+                "is_archived": getattr(plc, "is_archived", False),
                 "tag_count": tag_count,
                 "connection_status": _resolve_connection_status(plc),
             })
@@ -155,6 +159,37 @@ def toggle_plc(plc_id: int) -> Dict[str, Any]:
         "id": plc_id,
         "is_active": new_is_active,
     }
+
+
+def archive_plc(plc_id: int) -> Dict[str, Any]:
+    """Убирает ПЛК в архив: отключает опрос, скрывает из основного списка."""
+    with get_session() as session:
+        plc = session.query(PLC).filter(PLC.id == plc_id).first()
+        if not plc:
+            raise HTTPException(status_code=404, detail="PLC not found")
+
+        plc.is_archived = True
+        plc.is_active = False
+        plc_name = plc.name
+        session.commit()
+
+    collector_status.remove_plc(plc_id)
+    collector_status.request_restart()
+    return {"message": f"PLC '{plc_name}' archived", "id": plc_id}
+
+
+def unarchive_plc(plc_id: int) -> Dict[str, Any]:
+    """Возвращает ПЛК из архива (опрос остаётся выключенным — включить вручную)."""
+    with get_session() as session:
+        plc = session.query(PLC).filter(PLC.id == plc_id).first()
+        if not plc:
+            raise HTTPException(status_code=404, detail="PLC not found")
+
+        plc.is_archived = False
+        plc_name = plc.name
+        session.commit()
+
+    return {"message": f"PLC '{plc_name}' restored from archive", "id": plc_id}
 
 
 def get_plc_by_id(plc_id: int) -> Optional[PLC]:

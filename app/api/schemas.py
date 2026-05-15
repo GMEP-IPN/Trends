@@ -94,6 +94,7 @@ class PLCResponse(BaseModel):
     slot: int
     slot_ab: int = 0
     is_active: bool
+    is_archived: bool = False
     tag_count: int
     connection_status: str = "unknown"
 

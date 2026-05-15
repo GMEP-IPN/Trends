@@ -1,50 +1,97 @@
+function renderPLCItem(plc, isArchived = false) {
+    const typeLabel = plc.plc_type === 'allen_bradley' ? 'AB' : 'S7';
+    if (isArchived) {
+        return `
+        <div class="plc-btn" style="opacity: 0.6;">
+            <div class="plc-main">
+                <div class="plc-name">📦 ${plc.name} <span style="color: var(--text-muted); font-size: 0.7rem;">[${typeLabel}]</span></div>
+                <div class="plc-info">${plc.ip_address} • ${plc.tag_count} tags</div>
+            </div>
+            <div class="plc-actions">
+                <button class="plc-action-btn" onclick="event.stopPropagation(); unarchivePLC(${plc.id}, '${plc.name}')" title="Восстановить из архива">📤</button>
+                <button class="plc-action-btn delete" onclick="event.stopPropagation(); deletePLC(${plc.id}, '${plc.name}')" title="Delete">🗑️</button>
+            </div>
+        </div>`;
+    }
+    const isActive = plc.is_active !== false;
+    const inactiveStyle = !isActive ? 'opacity: 0.5;' : '';
+    let statusIcon = '⏸️';
+    if (isActive) {
+        if (plc.connection_status === 'connected') statusIcon = '🟢';
+        else if (plc.connection_status === 'disconnected') statusIcon = '🔴';
+        else statusIcon = '🟡';
+    }
+    return `
+    <div class="plc-btn ${selectedPlcId === plc.id ? 'active' : ''}" style="${inactiveStyle}" onclick="selectPLC(${plc.id}, '${plc.plc_type || 'siemens_s7'}')">
+        <div class="plc-main">
+            <div class="plc-name">${statusIcon} ${plc.name} <span style="color: var(--text-muted); font-size: 0.7rem;">[${typeLabel}]</span></div>
+            <div class="plc-info">${plc.ip_address} • ${plc.tag_count} tags</div>
+        </div>
+        <div class="plc-actions">
+            <button class="plc-action-btn" onclick="event.stopPropagation(); togglePLC(${plc.id})" title="${isActive ? 'Pause polling' : 'Resume polling'}">${isActive ? '⏸️' : '▶️'}</button>
+            <button class="plc-action-btn" onclick="event.stopPropagation(); editPLC(${plc.id}, '${plc.name}', '${plc.plc_type || 'siemens_s7'}', '${plc.ip_address}', ${plc.tcp_port}, ${plc.rack}, ${plc.slot}, ${plc.slot_ab || 0})" title="Edit">✏️</button>
+            <button class="plc-action-btn" onclick="event.stopPropagation(); archivePLC(${plc.id}, '${plc.name}')" title="В архив">📦</button>
+            <button class="plc-action-btn delete" onclick="event.stopPropagation(); deletePLC(${plc.id}, '${plc.name}')" title="Delete">🗑️</button>
+        </div>
+    </div>`;
+}
+
 async function loadPLCs() {
     try {
-        const response = await fetch('/api/plcs');
-        const plcs = await response.json();
-        plcsData = plcs;
+        const [activeResp, allResp] = await Promise.all([
+            fetch('/api/plcs'),
+            fetch('/api/plcs?include_archived=true'),
+        ]);
+        const activePlcs = await activeResp.json();
+        const allPlcs = await allResp.json();
+        const archivedPlcs = allPlcs.filter(p => p.is_archived);
+
+        plcsData = activePlcs;
 
         const plcSelector = document.getElementById('plcSelector');
 
-        if (plcs.length === 0) {
+        if (activePlcs.length === 0 && archivedPlcs.length === 0) {
             plcSelector.innerHTML = '<div style="color: var(--text-muted); font-size: 0.875rem; padding: 0.5rem;">No PLCs</div>';
             return;
         }
 
-        if (selectedPlcId === null && plcs.length > 0) {
-            selectedPlcId = plcs[0].id;
-            selectedPlcType = plcs[0].plc_type || 'siemens_s7';
+        if (selectedPlcId === null && activePlcs.length > 0) {
+            selectedPlcId = activePlcs[0].id;
+            selectedPlcType = activePlcs[0].plc_type || 'siemens_s7';
         }
 
-        const selectedPLC = plcs.find(p => p.id === selectedPlcId);
+        const selectedPLC = activePlcs.find(p => p.id === selectedPlcId);
         if (selectedPLC) selectedPlcType = selectedPLC.plc_type || 'siemens_s7';
 
-        plcSelector.innerHTML = plcs.map(plc => {
-            const typeLabel = plc.plc_type === 'allen_bradley' ? 'AB' : 'S7';
-            const isActive = plc.is_active !== false;
-            const inactiveStyle = !isActive ? 'opacity: 0.5;' : '';
-            let statusIcon = '⏸️';
-            if (isActive) {
-                if (plc.connection_status === 'connected') statusIcon = '🟢';
-                else if (plc.connection_status === 'disconnected') statusIcon = '🔴';
-                else statusIcon = '🟡';
-            }
-            return `
-            <div class="plc-btn ${selectedPlcId === plc.id ? 'active' : ''}" style="${inactiveStyle}" onclick="selectPLC(${plc.id}, '${plc.plc_type || 'siemens_s7'}')">
-                <div class="plc-main">
-                    <div class="plc-name">${statusIcon} ${plc.name} <span style="color: var(--text-muted); font-size: 0.7rem;">[${typeLabel}]</span></div>
-                    <div class="plc-info">${plc.ip_address} • ${plc.tag_count} tags</div>
+        let html = activePlcs.map(plc => renderPLCItem(plc, false)).join('');
+
+        if (archivedPlcs.length > 0) {
+            const isOpen = document.getElementById('archiveSection')?.classList.contains('open');
+            html += `
+            <div class="archive-section" id="archiveSection${isOpen ? ' class="open"' : ''}">
+                <div class="archive-toggle" onclick="toggleArchiveSection()">
+                    📦 Архив <span class="archive-count">${archivedPlcs.length}</span>
+                    <span class="archive-arrow" id="archiveArrow">${isOpen ? '▲' : '▼'}</span>
                 </div>
-                <div class="plc-actions">
-                    <button class="plc-action-btn" onclick="event.stopPropagation(); togglePLC(${plc.id})" title="${isActive ? 'Pause polling' : 'Resume polling'}">${isActive ? '⏸️' : '▶️'}</button>
-                    <button class="plc-action-btn" onclick="event.stopPropagation(); editPLC(${plc.id}, '${plc.name}', '${plc.plc_type || 'siemens_s7'}', '${plc.ip_address}', ${plc.tcp_port}, ${plc.rack}, ${plc.slot}, ${plc.slot_ab || 0})" title="Edit">✏️</button>
-                    <button class="plc-action-btn delete" onclick="event.stopPropagation(); deletePLC(${plc.id}, '${plc.name}')" title="Delete">🗑️</button>
+                <div class="archive-list" id="archiveList" style="display: ${isOpen ? 'block' : 'none'};">
+                    ${archivedPlcs.map(plc => renderPLCItem(plc, true)).join('')}
                 </div>
             </div>`;
-        }).join('');
+        }
+
+        plcSelector.innerHTML = html;
     } catch (error) {
         console.error('Error loading PLCs:', error);
     }
+}
+
+function toggleArchiveSection() {
+    const list = document.getElementById('archiveList');
+    const arrow = document.getElementById('archiveArrow');
+    if (!list) return;
+    const isOpen = list.style.display !== 'none';
+    list.style.display = isOpen ? 'none' : 'block';
+    if (arrow) arrow.textContent = isOpen ? '▼' : '▲';
 }
 
 function updatePLCFormFields() {
@@ -351,4 +398,41 @@ function addTagFromBrowse(memoryArea, dbNumber) {
 
 function closeBrowseModal() {
     document.getElementById('browseModal').classList.remove('active');
+}
+
+async function archivePLC(id, name) {
+    if (!confirm(`Убрать ПЛК "${name}" в архив?\nОпрос будет остановлен, теги скрыты из основного вида.`)) return;
+    try {
+        const response = await fetch(`/api/plcs/${id}/archive`, { method: 'PUT' });
+        if (response.ok) {
+            if (selectedPlcId === id) {
+                selectedPlcId = null;
+                selectedTagId = null;
+            }
+            showToast(`ПЛК "${name}" убран в архив`, 'success');
+            await loadPLCs();
+            await loadTags();
+            await initTrends();
+        } else {
+            showToast('Ошибка архивирования', 'error');
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function unarchivePLC(id, name) {
+    try {
+        const response = await fetch(`/api/plcs/${id}/unarchive`, { method: 'PUT' });
+        if (response.ok) {
+            showToast(`ПЛК "${name}" восстановлен из архива`, 'success');
+            await loadPLCs();
+            await loadTags();
+            await initTrends();
+        } else {
+            showToast('Ошибка восстановления', 'error');
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+    }
 }

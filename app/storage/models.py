@@ -42,6 +42,7 @@ class PLC(Base):
     slot_ab = Column(Integer, default=0)  # Slot для ControlLogix (обычно 0)
     
     is_active = Column(Boolean, default=True)
+    is_archived = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Связь с тегами
