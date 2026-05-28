@@ -876,6 +876,37 @@ body {
 }
 
 /* Chart Controls */
+.time-selector {
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+}
+
+.time-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 0.25rem 0.6rem;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.time-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.time-btn.active {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+}
+
 .chart-controls {
     display: flex;
     gap: 0.5rem;

@@ -11,6 +11,7 @@ from typing import Dict, Optional, Union, Any
 from dataclasses import dataclass
 
 from app.storage import get_session, PLC, Tag, TrendData
+from app.storage.database import get_monthly_session, IS_TESTING
 from app.storage.models import PLC_TYPE_SIEMENS_S7, PLC_TYPE_ALLEN_BRADLEY
 from app.collectors.S7Comm.siemens_s7 import PLC as S7Client, PLCConnectionError, PLCReadError
 from app.config.settings import BATCH_INSERT_SIZE
@@ -299,7 +300,7 @@ class CollectorService:
         logger.info(f"Configuration loaded: {len(self.connections)} PLCs")
     
     def _flush_buffer(self):
-        """Запись буфера в БД"""
+        """Запись буфера в ежемесячные БД"""
         if not self.buffer:
             return
         
@@ -307,30 +308,32 @@ class CollectorService:
             to_write = self.buffer.copy()
             self.buffer.clear()
         
-        with get_session() as session:
-            for tv in to_write:
-                trend = TrendData(
-                    tag_id=tv.tag_id,
-                    timestamp=tv.timestamp,
-                    value=tv.value,
-                    quality=tv.quality
-                )
-                session.add(trend)
+        # Группируем записи по месяцам
+        grouped = {}
+        for tv in to_write:
+            key = (tv.timestamp.year, tv.timestamp.month)
+            if key not in grouped:
+                grouped[key] = []
+            grouped[key].append(tv)
+            
+        for (year, month), items in grouped.items():
+            dt = datetime(year, month, 1)
+            session_ctx = get_session() if IS_TESTING else get_monthly_session(dt)
+            with session_ctx as session:
+                for tv in items:
+                    trend = TrendData(
+                        tag_id=tv.tag_id,
+                        timestamp=tv.timestamp,
+                        value=tv.value,
+                        quality=tv.quality
+                    )
+                    session.add(trend)
         
-        logger.info(f"Saved {len(to_write)} values to database")
+        logger.info(f"Saved {len(to_write)} values to monthly databases")
     
     def _maybe_cleanup(self):
-        """Периодическая очистка старых данных"""
-        hours_since_cleanup = (datetime.now() - self._last_cleanup).total_seconds() / 3600
-        
-        if hours_since_cleanup >= self._cleanup_interval_hours:
-            try:
-                deleted = cleanup_old_data(days=self._retention_days)
-                if deleted > 0:
-                    logger.info(f"Cleaned up {deleted} old records (>{self._retention_days} days)")
-                self._last_cleanup = datetime.now()
-            except Exception as e:
-                logger.error(f"Cleanup failed: {e}")
+        """Периодическая очистка старых данных (отключено, используется помесячное разбиение БД)"""
+        pass
     
     def _poll_cycle(self):
         """Один цикл опроса всех тегов"""
@@ -350,9 +353,6 @@ class CollectorService:
         if len(self.buffer) >= BATCH_INSERT_SIZE or (self.buffer and time_to_flush):
             self._flush_buffer()
             self._last_flush = datetime.now()
-        
-        # Периодическая очистка старых данных
-        self._maybe_cleanup()
     
     def _run_loop(self):
         """Главный цикл сервиса"""

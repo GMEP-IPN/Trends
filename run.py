@@ -5,6 +5,7 @@ Trends Collector - Точка входа
     python run.py                    - Запуск сбора данных + веб-интерфейс
     python run.py --simulate         - Запуск в режиме симуляции
     python run.py --status           - Статус системы
+
     
 ПЛК и теги настраиваются через веб-интерфейс: http://127.0.0.1:8000
 """
@@ -167,23 +168,22 @@ def show_status():
     print("SYSTEM STATUS")
     print("="*60)
     
+    from app.services.trend_service import get_total_trend_count, get_global_latest_record
+    
     with get_session() as session:
         plc_count = session.query(PLC).filter(PLC.is_active == True).count()
         tag_count = session.query(Tag).filter(Tag.is_active == True).count()
-        data_count = session.query(TrendData).count()
         
-        # Последняя запись
-        last_record = session.query(TrendData).order_by(
-            TrendData.timestamp.desc()
-        ).first()
+        data_count = get_total_trend_count()
+        last_record = get_global_latest_record()
         
         print(f"\n  PLCs (active):     {plc_count}")
         print(f"  Tags (active):     {tag_count}")
         print(f"  Trend records:     {data_count}")
         
         if last_record:
-            print(f"  Last record:       {last_record.timestamp}")
-            print(f"  Last value:        {last_record.value}")
+            print(f"  Last record:       {last_record[0]}")
+            print(f"  Last value:        {last_record[1]}")
         
         # Список ПЛК
         plcs = session.query(PLC).filter(PLC.is_active == True).all()

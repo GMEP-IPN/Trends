@@ -244,7 +244,8 @@ def delete_tag(tag_id: int) -> Dict[str, Any]:
             raise HTTPException(status_code=404, detail="Tag not found")
 
         tag_name = tag.name
-        deleted_trends = session.query(TrendData).filter(TrendData.tag_id == tag_id).delete()
+        from app.services.trend_service import delete_trend_data_for_tag
+        deleted_trends = delete_trend_data_for_tag(tag_id)
         session.delete(tag)
 
         collector_status.request_restart()

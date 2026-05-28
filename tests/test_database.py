@@ -108,7 +108,7 @@ class TestModelIndexes:
         index_names = [idx['name'] for idx in indexes]
         
         # Индекс должен существовать (но не уникальный - для поддержки Allen-Bradley)
-        assert any('tag_plc_address' in name for name in index_names)
+        assert any('tag_plc_area_address' in name for name in index_names)
 
 
 class TestCascadeDelete:

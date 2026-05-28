@@ -111,16 +111,14 @@ class TestTagsEndpoint:
     
     def test_create_tag_success(self, client, reset_collector_status):
         """Успешное создание тега"""
-        with patch('app.api.server.get_session') as mock_session:
+        with patch('app.services.tag_service.get_session') as mock_session:
             session = MagicMock()
             
             # Мокаем PLC
             mock_plc = MagicMock()
             mock_plc.id = 1
-            session.query.return_value.filter.return_value.first.side_effect = [
-                mock_plc,  # Первый вызов - поиск PLC
-                None       # Второй вызов - проверка существующего тега
-            ]
+            session.query.return_value.filter.return_value.first.return_value = mock_plc
+            session.query.return_value.filter.return_value.filter.return_value.first.return_value = None
             
             # Мокаем создание тега
             def flush_side_effect():
@@ -294,7 +292,7 @@ class TestPLCsEndpoint:
     
     def test_list_plcs(self, client):
         """Список ПЛК"""
-        with patch('app.api.server.get_session') as mock_session:
+        with patch('app.services.plc_service.get_session') as mock_session:
             session = MagicMock()
             
             mock_plc = MagicMock()
@@ -326,7 +324,7 @@ class TestPLCsEndpoint:
     
     def test_create_plc_success(self, client, reset_collector_status):
         """Успешное создание ПЛК"""
-        with patch('app.api.server.get_session') as mock_session:
+        with patch('app.services.plc_service.get_session') as mock_session:
             session = MagicMock()
             session.query.return_value.filter.return_value.first.return_value = None
             
@@ -352,7 +350,7 @@ class TestPLCsEndpoint:
     
     def test_create_plc_duplicate(self, client):
         """Создание ПЛК с существующим именем"""
-        with patch('app.api.server.get_session') as mock_session:
+        with patch('app.services.plc_service.get_session') as mock_session:
             session = MagicMock()
             mock_existing = MagicMock()
             session.query.return_value.filter.return_value.first.return_value = mock_existing
@@ -373,7 +371,7 @@ class TestPLCsEndpoint:
     
     def test_delete_plc_success(self, client, reset_collector_status):
         """Успешное удаление ПЛК"""
-        with patch('app.api.server.get_session') as mock_session:
+        with patch('app.services.plc_service.get_session') as mock_session:
             session = MagicMock()
             
             mock_plc = MagicMock()
@@ -390,7 +388,7 @@ class TestPLCsEndpoint:
             response = client.delete("/api/plcs/1")
             
             assert response.status_code == 200
-            assert mock_plc.is_active == False
+            session.delete.assert_called_with(mock_plc)
             assert collector_status.restart_requested == True
 
 

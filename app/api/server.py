@@ -41,6 +41,8 @@ from app.services.trend_service import (
     get_latest_value,
     get_latest_values_batch,
     get_statistics,
+    get_total_trend_count,
+    get_global_latest_record,
 )
 from app.storage import get_session, PLC, Tag, TrendData
 from app.storage.models import PLC_TYPE_SIEMENS_S7, PLC_TYPE_ALLEN_BRADLEY
@@ -95,10 +97,10 @@ async def get_status():
     with get_session() as session:
         plc_count = session.query(PLC).filter(PLC.is_active == True, PLC.is_archived == False).count()
         tag_count = session.query(Tag).join(PLC).filter(Tag.is_active == True, PLC.is_archived == False).count()
-        trend_count = session.query(TrendData).count()
-
-        last = session.query(TrendData).order_by(TrendData.timestamp.desc()).first()
-        last_update = last.timestamp.isoformat() if last else None
+        
+        trend_count = get_total_trend_count()
+        last = get_global_latest_record()
+        last_update = last[0].isoformat() if last else None
 
         if collector_status.running:
             conn_status = "connected" if collector_status.connected else "disconnected"
@@ -367,7 +369,7 @@ async def get_tag_trend(
 ):
     end_time = datetime.now()
     start_time = end_time - timedelta(minutes=minutes)
-    data = get_trend_data(tag_id, start_time, end_time, limit=5000)
+    data = get_trend_data(tag_id, start_time, end_time)
     return [
         TrendPointResponse(timestamp=ts.isoformat(), value=round(val, 2))
         for ts, val in data
@@ -400,7 +402,7 @@ async def get_all_trends(
                 tag_name=tag.name,
                 data=[
                     TrendPointResponse(timestamp=ts.isoformat(), value=round(val, 2))
-                    for ts, val in get_trend_data(tag.id, start_time, end_time, limit=5000)
+                    for ts, val in get_trend_data(tag.id, start_time, end_time)
                 ],
             )
             for tag in tags

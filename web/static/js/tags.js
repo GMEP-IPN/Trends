@@ -168,6 +168,17 @@ async function selectTag(tagId, tagName) {
     await loadStatistics();
 }
 
+async function setTimeRange(minutes) {
+    selectedMinutes = minutes;
+    loadedFrom = null;
+    isFetchingHistory = false;
+    document.querySelectorAll('.time-btn').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.minutes) === minutes);
+    });
+    await loadTrendData();
+    await loadStatistics();
+}
+
 async function initTrends() {
     await loadTrendData();
     await loadStatistics();
@@ -176,6 +187,8 @@ async function initTrends() {
         loadStatistics();
         refreshLiveData();
     }, 1000);
+    if (historyCheckInterval) clearInterval(historyCheckInterval);
+    historyCheckInterval = setInterval(onChartNavigate, 500);
 }
 
 async function loadStatistics() {

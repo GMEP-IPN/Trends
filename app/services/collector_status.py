@@ -62,6 +62,11 @@ class CollectorStatus:
         with self._lock:
             self._plc_name = value
     
+    @property
+    def restart_requested(self) -> bool:
+        with self._lock:
+            return self._restart_requested
+
     def request_restart(self):
         """Запросить перезапуск коллектора"""
         with self._lock:

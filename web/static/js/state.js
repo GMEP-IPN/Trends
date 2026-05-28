@@ -10,3 +10,4 @@ let plcsData = [];
 let yAxisLocked = false;
 let loadedFrom = null;
 let isFetchingHistory = false;
+let historyCheckInterval = null;
