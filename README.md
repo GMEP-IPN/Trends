@@ -10,13 +10,16 @@ Data collection and visualization system for Siemens S7 and Allen-Bradley PLCs.
 - 🔌 **Siemens S7** — S7-300/400/1200/1500 (PROFINET/S7Comm)
 - 🔌 **Allen-Bradley** — ControlLogix/CompactLogix (EtherNet/IP)
 - 📈 Real-time automatic data collection
-- 💾 Trend storage in SQLite
-- 🌐 **Web interface** for configuration and visualization
+- 📂 **Monthly Partitioning** — trend data automatically splits into monthly SQLite databases (`trends_data_YYYY_MM.db`) to keep the main configuration database small and fast.
+- 🎨 **Industrial SCADA Trends** — powered by **Apache ECharts** (fully offline-first, no CDN dependencies).
+- ⚡ **High Resolution Precision** — fetches and displays up to 200,000 raw points with sub-second accuracy for zooming, combined with client-side visual downsampling for smooth UI rendering.
+- ⏱️ **Infinite History Panning** — automatically pulls older segments of historical data from monthly databases on-the-fly as you scroll back in time.
+- 🛠️ **SCADA Cursor & Toolbox** — vertical tracking визир, dynamic legend grouping all active pens' values at the cursor position, PNG export, and tabular data view.
 - 🔍 **Browse PLC** — view blocks and tags directly from PLC
-- 🎨 Beautiful interactive charts (Chart.js)
 - 🏠 Built-in simulator for testing (S7 + AB)
 - ⏸️ Activate/deactivate PLC polling
 - 🔄 Automatic restart on configuration changes
+- 🔄 **Update Checker** — checks GitHub Releases API for updates, with support for private repositories via tokens.
 
 ## 📦 Installation
 
@@ -84,9 +87,14 @@ On first launch:
   - ➕ — add tag manually
 
 ### Main screen
-- 📊 Real-time trend charts
+- 📊 Real-time high-performance trend charts (ECharts)
+- 📊 Vertical tracking SCADA cursor showing **all active tags' values simultaneously** aligned to the closest millisecond.
+- ⚙️ Bottom **dataZoom slider** for smooth scrolling and scaling of historical charts.
+- 🛠️ **Toolbox**:
+  - `Таблица` (Data View) — display raw plotted data in table format.
+  - `Экспорт PNG` (Save as Image) — save current chart view to disk.
 - 📈 Statistics: min, max, average, point count
-- ⏱️ Time range: 5 min, 15 min, 1 hour, 6 hours, 24 hours
+- ⏱️ Time range: 15 min, 30 min, 1 hour, 6 hours, 24 hours
 
 ### Browse PLC (🔍)
 
@@ -108,18 +116,19 @@ System settings in `config.yaml`:
 ```yaml
 # Database
 database:
-  url: "sqlite:///data/trends.db"
+  url: "sqlite:///trends.db"  # Config DB. Monthly databases will be created next to it.
 
 # Collector settings
 collector:
   batch_size: 100
-  flush_interval_sec: 5
+  flush_interval_sec: 1
   reconnect_delay_sec: 5
 
 # API server
 api:
   host: "127.0.0.1"
   port: 8000
+  # github_token: "YOUR_PAT_TOKEN_HERE" # Optional: Token for update checks in private repositories
 
 # Logging
 logging:
@@ -127,12 +136,21 @@ logging:
   file: "logs/trends.log"
 
 # Data retention
-retention:
-  days: 30                    # Keep data for 30 days
+storage:
+  retention_days: 30          # Keep data for 30 days
   cleanup_interval_hours: 6   # Cleanup every 6 hours
 ```
 
 > 💡 **PLCs and tags are configured via web interface**, not in config.yaml!
+
+### 📂 Historical Data Migration
+
+If you are upgrading from older versions where trend data was stored in the main `trends.db`, you can migrate the old records to the new monthly databases by running:
+
+```bash
+# Stages existing data from trends.db to monthly databases and vacuums trends.db
+python scratch/migrate_to_monthly.py
+```
 
 ## 🏠 Simulation Mode
 
@@ -178,7 +196,8 @@ Browse for SimAB returns 23 simulated tags of various types.
 | POST | `/api/tags` | Add tag |
 | PUT | `/api/tags/{id}` | Update tag |
 | DELETE | `/api/tags/{id}` | Delete tag |
-| GET | `/api/tags/{id}/trend` | Trend data |
+| GET | `/api/tags/{id}/trend` | Trend data (raw values) |
+| GET | `/api/trends` | Plotted trends (auto-aggregates or returns raw data) |
 | GET | `/api/tags/{id}/statistics` | Tag statistics |
 | POST | `/api/collector/restart` | Restart collector |
 
@@ -195,17 +214,25 @@ trends/
 │   │   └── EtherNetIP/
 │   │       └── allen_bradley.py   # Allen-Bradley client
 │   ├── config/
+│   │   ├── settings.py            # Constant defaults
 │   │   └── config_loader.py       # YAML loader
 │   ├── services/
 │   │   ├── collector_service.py   # Data collection service
 │   │   ├── collector_manager.py   # Collector management
 │   │   ├── collector_status.py    # Connection status
 │   │   ├── runtime_config.py      # Runtime settings
-│   │   └── trend_service.py       # Trend operations
+│   │   ├── update_checker.py      # Update checks
+│   │   └── trend_service.py       # Trend operations & downsampling
 │   └── storage/
 │       ├── database.py            # DB connection
 │       └── models.py              # SQLAlchemy models
 ├── web/
+│   ├── static/
+│   │   ├── css/
+│   │   ├── js/
+│   │   │   └── charts.js          # ECharts dynamic bindings
+│   │   └── vendor/
+│   │       └── echarts.min.js     # Plotted engine
 │   └── templates/
 │       └── index.html             # Web interface
 ├── data/                          # SQLite database
@@ -258,7 +285,7 @@ pytest -v
 - **pycomm3** — Allen-Bradley communication
 - FastAPI + Uvicorn — web server
 - SQLAlchemy 2.0+ — ORM
-- Chart.js — charts
+- **Apache ECharts** (plotted locally) — charts
 - pystray + Pillow — system tray (Windows)
 
 ## 📄 License
