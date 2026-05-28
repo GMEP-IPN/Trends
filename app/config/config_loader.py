@@ -33,10 +33,13 @@ class AppConfig:
     # API
     api_host: str
     api_port: int
-    
+
     # Логирование
     log_level: str
     log_file: str
+    
+    # GitHub Token (для приватных репозиториев)
+    github_token: Optional[str] = None
 
 
 def load_config(config_path: str = "config.yaml") -> AppConfig:
@@ -76,6 +79,9 @@ def load_config(config_path: str = "config.yaml") -> AppConfig:
         # API (env vars override yaml: TRENDS_HOST, TRENDS_PORT)
         api_host=os.environ.get('TRENDS_HOST', data.get('api', {}).get('host', '127.0.0.1')),
         api_port=int(os.environ.get('TRENDS_PORT', data.get('api', {}).get('port', 8000))),
+        
+        # GitHub Token
+        github_token=os.environ.get('TRENDS_GITHUB_TOKEN', data.get('api', {}).get('github_token', None)),
 
         # Логирование (env var: TRENDS_LOG_LEVEL)
         log_level=os.environ.get('TRENDS_LOG_LEVEL', data.get('logging', {}).get('level', 'INFO')),

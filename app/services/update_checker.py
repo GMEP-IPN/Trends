@@ -20,10 +20,13 @@ _update_available: bool = False
 _releases_url: str = _RELEASES_PAGE
 
 
+import re
+
 def _parse_version(v: str) -> tuple:
     try:
-        return tuple(int(x) for x in v.lstrip("v").split("."))
-    except ValueError:
+        parts = re.findall(r'\d+', v)
+        return tuple(int(x) for x in parts)
+    except Exception:
         return (0,)
 
 
@@ -31,7 +34,24 @@ def _check() -> None:
     global _latest_version, _update_available, _releases_url
     from app import __version__
     try:
-        req = Request(_GITHUB_API, headers={"User-Agent": f"Trends/{__version__}"})
+        # Load GitHub Token if configured
+        token = None
+        try:
+            from app.config.config_loader import get_config
+            cfg = get_config()
+            token = getattr(cfg, 'github_token', None)
+        except Exception:
+            pass
+            
+        if not token:
+            import os
+            token = os.environ.get("TRENDS_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
+
+        headers = {"User-Agent": f"Trends/{__version__}"}
+        if token:
+            headers["Authorization"] = f"token {token}"
+
+        req = Request(_GITHUB_API, headers=headers)
         with urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read())
         tag = data.get("tag_name", "")
